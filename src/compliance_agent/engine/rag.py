@@ -63,7 +63,7 @@ class RegulatoryRAG:
             console.print("[yellow]No .txt or .md files found in source directory.[/yellow]")
             return 0
 
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,

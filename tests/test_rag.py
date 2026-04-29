@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("langchain_text_splitters", reason="langchain-text-splitters not installed")
+pytest.importorskip("langchain_community", reason="langchain-community not installed")
+
 from compliance_agent.engine.rag import RegulatoryRAG
 
 
