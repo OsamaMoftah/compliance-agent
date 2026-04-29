@@ -133,9 +133,6 @@ Compliance Agent is the flagship integration of:
 
 - **[LegalDrift](https://github.com/OsamaMoftah/LegalDrift)** — Semantic drift detection for legal documents. Published on PyPI.
 - **[DiffDDL](https://github.com/OsamaMoftah/DiffDDL)** — Differentiable deontic logic for compliance automation.
-- **[Ontology-StarterKit](https://github.com/OsamaMoftah/Ontology-StarterKit)** — Ontology-first AI with GraphRAG and SHACL validation.
-- **[Awesome-AI-in-Europe](https://github.com/OsamaMoftah/Awesome-Ai-in-Europe)** — Curated European AI resources.
-- **[NSAI Thesis](https://github.com/OsamaMoftah/Integrating-DDL-in-ahybrid-architecture)** — Neuro-symbolic AI for legal concept drift detection.
 
 ---
 
