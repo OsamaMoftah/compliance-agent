@@ -1,10 +1,7 @@
 """Tests for compliance checker."""
 
-import os
 import tempfile
 from pathlib import Path
-
-import yaml
 
 from compliance_agent.engine.checker import ComplianceChecker, check_policy
 

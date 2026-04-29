@@ -2,16 +2,12 @@
 
 import os
 import tempfile
-from pathlib import Path
-
-import pytest
-import yaml
 
 from compliance_agent.engine.reasoner import (
+    DDL,
     ComplianceReasoner,
     ComplianceRule,
     Predicate,
-    DDL,
     extract_predicate,
 )
 

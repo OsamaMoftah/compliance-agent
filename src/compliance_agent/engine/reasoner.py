@@ -3,11 +3,9 @@
 Includes a self-contained DDL implementation so DiffDDL is an optional dependency.
 """
 
-import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from rich.console import Console
@@ -181,7 +179,11 @@ def _parse_condition_keywords(condition: str) -> list[str]:
     # If no keywords extracted, use the whole condition words
     if not keywords:
         words = condition_lower.replace('"', "").replace("'", "").split()
-        keywords = [w for w in words if len(w) > 3 and w not in ("document", "text", "the", "and", "that", "must", "shall", "this", "with")]
+        stopwords = {
+            "document", "text", "the", "and", "that", "must",
+            "shall", "this", "with",
+        }
+        keywords = [w for w in words if len(w) > 3 and w not in stopwords]
 
     return list(dict.fromkeys(keywords))  # deduplicate preserving order
 
@@ -205,19 +207,28 @@ class ComplianceReasoner:
             raise FileNotFoundError(f"Rules file not found: {rules_path}")
 
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        rules = []
-        for r in data.get("rules", []):
-            predicates = [Predicate(name=p["name"], condition=p["condition"], weight=p.get("weight", 1.0)) for p in r.get("predicates", [])]
-            rules.append(ComplianceRule(id=r["id"], type=r["type"], description=r["description"], predicates=predicates))
-
-        return rules
+        return self.parse_rules_dict(data)
 
     def parse_rules_dict(self, data: dict) -> list[ComplianceRule]:
         """Parse rules from an already-loaded YAML dict (for dashboard/API use)."""
         rules = []
         for r in data.get("rules", []):
-            predicates = [Predicate(name=p["name"], condition=p["condition"], weight=p.get("weight", 1.0)) for p in r.get("predicates", [])]
-            rules.append(ComplianceRule(id=r["id"], type=r["type"], description=r["description"], predicates=predicates))
+            predicates = [
+                Predicate(
+                    name=p["name"],
+                    condition=p["condition"],
+                    weight=p.get("weight", 1.0),
+                )
+                for p in r.get("predicates", [])
+            ]
+            rules.append(
+                ComplianceRule(
+                    id=r["id"],
+                    type=r["type"],
+                    description=r["description"],
+                    predicates=predicates,
+                )
+            )
         return rules
 
     def evaluate_policy(self, policy_text: str, rules: list[ComplianceRule]) -> ComplianceReport:
@@ -231,7 +242,11 @@ class ComplianceReasoner:
         risk = self._determine_risk_level(score, results)
 
         failing = [r for r in results if not r.passed]
-        summary_parts = [f"{len(results)} rules evaluated: {sum(1 for r in results if r.passed)} passed, {len(failing)} failed."]
+        summary_parts = [
+            f"{len(results)} rules evaluated: "
+            f"{sum(1 for r in results if r.passed)} passed, "
+            f"{len(failing)} failed."
+        ]
         if failing:
             summary_parts.append(f"Top failures: {', '.join(r.rule_id for r in failing[:3])}")
 
@@ -247,13 +262,17 @@ class ComplianceReasoner:
         score = self._calculate_overall_score(results)
         risk = self._determine_risk_level(score, results)
 
-        return ComplianceReport(results=results, overall_score=score, risk_level=risk, summary=f"Scenario evaluated: {len(results)} rules, score={score:.2f}")
+        return ComplianceReport(
+            results=results,
+            overall_score=score,
+            risk_level=risk,
+            summary=f"Scenario evaluated: {len(results)} rules, score={score:.2f}",
+        )
 
     def _evaluate_rule(self, rule: ComplianceRule, text: str) -> RuleResult:
         """Evaluate a single rule against policy text."""
         predicate_results = [extract_predicate(p, text) for p in rule.predicates]
 
-        matched = [p for p in predicate_results if p["matched"]]
         scores = [p["score"] for p in predicate_results]
 
         if not scores:

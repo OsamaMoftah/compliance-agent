@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 from rich.table import Table
@@ -25,7 +24,11 @@ class DriftBridge:
         try:
             from legaldrift import DriftDetector, EmbeddingEngine, LegalDocument
 
-            self._legaldrift = {"DriftDetector": DriftDetector, "EmbeddingEngine": EmbeddingEngine, "LegalDocument": LegalDocument}
+            self._legaldrift = {
+                "DriftDetector": DriftDetector,
+                "EmbeddingEngine": EmbeddingEngine,
+                "LegalDocument": LegalDocument,
+            }
         except ImportError:
             raise RuntimeError(
                 "LegalDrift is not installed. Install it with: pip install legaldrift"

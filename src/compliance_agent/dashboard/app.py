@@ -3,8 +3,8 @@
 import streamlit as st
 import yaml
 
-from compliance_agent.engine.rag import RegulatoryRAG
 from compliance_agent.engine.drift import DriftBridge
+from compliance_agent.engine.rag import RegulatoryRAG
 from compliance_agent.engine.reasoner import ComplianceReasoner
 
 st.set_page_config(page_title="Compliance Agent", page_icon="\U0001f6e1\ufe0f", layout="wide")

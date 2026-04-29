@@ -38,7 +38,7 @@ def monitor(source, query, reset):
         results = rag.query(query)
         rag.print_results(results)
     else:
-        count = rag.ingest_directory(source, reset=reset)
+        rag.ingest_directory(source, reset=reset)
         console.print(f"\n[green]Ready. Try:[/green] compliance-agent monitor --source {source} --query \"Your question\"")
         if sources := rag.list_sources():
             console.print(f"\n[dim]Indexed sources: {', '.join(sources)}[/dim]")
