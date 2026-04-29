@@ -1,0 +1,36 @@
+REGULATION (EU) 2024/1689 — Artificial Intelligence Act
+
+Article 5 — Prohibited AI Practices
+
+The following AI practices shall be prohibited:
+
+(a) AI systems that deploy subliminal techniques or manipulative or deceptive
+techniques to materially distort behaviour causing significant harm.
+
+(b) AI systems that exploit vulnerabilities of persons due to age, disability,
+or social/economic situation causing significant harm.
+
+Article 6 — Classification Rules for High-Risk AI Systems
+
+An AI system shall be considered high-risk if:
+
+(a) It is a safety component of a product covered by Union harmonisation
+legislation listed in Annex I.
+
+(b) The product requires third-party conformity assessment.
+
+Article 9 — Risk Management System
+
+A risk management system shall be established, implemented, documented, and
+maintained for high-risk AI systems. It shall be a continuous iterative process
+throughout the entire lifecycle.
+
+Article 13 — Transparency and Provision of Information
+
+High-risk AI systems shall be designed to ensure operation is sufficiently
+transparent to enable deployers to interpret output and use it appropriately.
+
+Article 14 — Human Oversight
+
+High-risk AI systems shall be designed with appropriate human-machine interface
+tools to ensure effective oversight by natural persons during the AI system's use.

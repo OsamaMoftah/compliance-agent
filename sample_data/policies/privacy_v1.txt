@@ -1,0 +1,25 @@
+# Sample Policy Document v1 — Company Data Protection Policy
+
+## 1. Data Collection
+We collect personal data including name, email address, and job title for the purpose of account registration and service delivery. All data collection is subject to explicit user consent.
+
+## 2. Data Processing
+Personal data is processed on servers located within the European Union. We do not transfer personal data outside the EU without adequate safeguards.
+
+## 3. Data Retention
+Personal data is retained for the duration of the user's account plus 12 months. Users may request deletion of their data at any time.
+
+## 4. Automated Decision Making
+Our platform does not use automated profiling or automated decision-making that produces legal effects concerning data subjects.
+
+## 5. Data Security
+We implement encryption at rest and in transit, access controls, and regular security audits to protect personal data.
+
+## 6. User Rights
+Users have the right to access, rectify, and delete their personal data. Requests are processed within 30 calendar days.
+
+## 7. Third-Party Sharing
+Personal data is shared with third-party service providers only for purposes of service delivery and under strict data processing agreements.
+
+## 8. Consent Management
+Consent is obtained through clear, affirmative action. Users may withdraw consent at any time through account settings.

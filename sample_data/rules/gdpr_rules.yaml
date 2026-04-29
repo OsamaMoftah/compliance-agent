@@ -1,0 +1,110 @@
+rules:
+  - id: "GDPR-CONSENT-001"
+    type: "obligation"
+    description: "Consent must be obtained before processing personal data"
+    predicates:
+      - name: "has_consent"
+        condition: "document contains 'explicit user consent' or 'affirmative action'"
+        weight: 1.0
+
+  - id: "GDPR-TRANSFER-001"
+    type: "obligation"
+    description: "Cross-border data transfers require adequate safeguards"
+    predicates:
+      - name: "has_safeguards"
+        condition: "document mentions SCCs, BCRs, or adequacy decision"
+        weight: 0.9
+      - name: "transfers_outside_eu"
+        condition: "document mentions transfer outside EU or to third countries"
+        weight: 0.8
+
+  - id: "GDPR-RETENTION-001"
+    type: "obligation"
+    description: "Data must not be retained longer than necessary"
+    predicates:
+      - name: "has_retention_policy"
+        condition: "document specifies data retention period"
+        weight: 0.7
+      - name: "has_deletion_mechanism"
+        condition: "document allows deletion or anonymization of data"
+        weight: 0.8
+
+  - id: "GDPR-AUTOMATED-001"
+    type: "obligation"
+    description: "Automated decision-making must be disclosed with opt-out"
+    predicates:
+      - name: "uses_automated_processing"
+        condition: "document mentions profiling or automated decision-making"
+        weight: 0.6
+      - name: "has_opt_out"
+        condition: "document provides opt-out from automated processing"
+        weight: 0.9
+
+  - id: "GDPR-SECURITY-001"
+    type: "obligation"
+    description: "Appropriate technical and organizational security measures required"
+    predicates:
+      - name: "has_encryption"
+        condition: "document mentions encryption"
+        weight: 0.8
+      - name: "has_access_controls"
+        condition: "document mentions access controls"
+        weight: 0.7
+      - name: "has_security_audits"
+        condition: "document mentions security audits or assessments"
+        weight: 0.7
+
+  - id: "GDPR-RIGHTS-001"
+    type: "obligation"
+    description: "Users must be able to exercise their data subject rights"
+    predicates:
+      - name: "has_access_right"
+        condition: "document guarantees right to access data"
+        weight: 0.8
+      - name: "has_rectification_right"
+        condition: "document guarantees right to rectify data"
+        weight: 0.7
+      - name: "has_erasure_right"
+        condition: "document guarantees right to delete data"
+        weight: 0.8
+
+  - id: "GDPR-SHARING-001"
+    type: "prohibition"
+    description: "Data must not be shared without lawful basis or DPA"
+    predicates:
+      - name: "shares_with_third_parties"
+        condition: "document mentions sharing data with third parties"
+        weight: 0.5
+      - name: "has_dpa"
+        condition: "document mentions data processing agreements"
+        weight: 0.9
+
+  - id: "AI-ACT-HIGH-RISK-001"
+    type: "obligation"
+    description: "High-risk AI systems require conformity assessment"
+    predicates:
+      - name: "is_high_risk_ai"
+        condition: "document mentions high-risk AI or AI system used in regulated context"
+        weight: 0.8
+      - name: "has_conformity_assessment"
+        condition: "document mentions conformity assessment or compliance evaluation"
+        weight: 0.9
+
+  - id: "AI-ACT-TRANSPARENCY-001"
+    type: "obligation"
+    description: "AI systems must be transparent and explainable"
+    predicates:
+      - name: "uses_ai"
+        condition: "document mentions AI, ML, or automated system"
+        weight: 0.6
+      - name: "has_transparency"
+        condition: "document mentions explainability, transparency, or interpretability"
+        weight: 0.9
+
+  - id: "AI-ACT-OVERSIGHT-001"
+    type: "obligation"
+    description: "Human oversight required for high-risk AI systems"
+    predicates:
+      - name: "has_human_oversight"
+        condition: "document mentions human oversight or human review"
+        weight: 0.9
