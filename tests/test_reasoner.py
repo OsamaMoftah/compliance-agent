@@ -8,6 +8,7 @@ from compliance_agent.engine.reasoner import (
     ComplianceReasoner,
     ComplianceRule,
     Predicate,
+    RuleValidationError,
     extract_predicate,
 )
 
@@ -101,8 +102,42 @@ def test_evaluate_policy():
         rules,
     )
     assert report.total_count == 2
-    assert report.passed_count >= 1
+    assert report.passed_count == 2
     assert report.risk_level in ("LOW", "MEDIUM", "HIGH")
+
+
+def test_prohibition_fails_when_forbidden_evidence_is_present():
+    rules = [
+        ComplianceRule(
+            id="TEST-PROHIBIT",
+            type="prohibition",
+            description="Must not sell data",
+            predicates=[Predicate(name="sells_data", condition="contains 'sell data'", weight=1.0)],
+        ),
+    ]
+
+    reasoner = ComplianceReasoner(threshold=0.5)
+    report = reasoner.evaluate_policy("We may sell data to advertising partners.", rules)
+
+    assert report.failed_count == 1
+    assert report.results[0].strength < 0.5
+
+
+def test_prohibition_passes_when_evidence_is_negated():
+    rules = [
+        ComplianceRule(
+            id="TEST-PROHIBIT",
+            type="prohibition",
+            description="Must not sell data",
+            predicates=[Predicate(name="sells_data", condition="contains 'sell data'", weight=1.0)],
+        ),
+    ]
+
+    reasoner = ComplianceReasoner(threshold=0.5)
+    report = reasoner.evaluate_policy("We do not sell data to third parties.", rules)
+
+    assert report.passed_count == 1
+    assert report.results[0].strength == 1.0
 
 
 def test_evaluate_scenario():
@@ -136,3 +171,48 @@ def test_parse_rules_dict():
     rules = reasoner.parse_rules_dict(data)
     assert len(rules) == 1
     assert rules[0].id == "T-001"
+
+
+def test_parse_rules_dict_rejects_invalid_rule_type():
+    data = {
+        "rules": [
+            {
+                "id": "T-001",
+                "type": "requirement",
+                "description": "Test",
+                "predicates": [{"name": "p1", "condition": "test", "weight": 1.0}],
+            }
+        ]
+    }
+    reasoner = ComplianceReasoner()
+
+    try:
+        reasoner.parse_rules_dict(data)
+    except RuleValidationError as e:
+        assert "type must be one of" in str(e)
+    else:
+        raise AssertionError("Expected RuleValidationError")
+
+
+def test_validate_rules_dict_rejects_duplicate_ids_and_bad_weights():
+    data = {
+        "rules": [
+            {
+                "id": "T-001",
+                "type": "obligation",
+                "description": "Test",
+                "predicates": [{"name": "p1", "condition": "test", "weight": 1.2}],
+            },
+            {
+                "id": "T-001",
+                "type": "permission",
+                "description": "Duplicate",
+                "predicates": [{"name": "p2", "condition": "test"}],
+            },
+        ]
+    }
+    reasoner = ComplianceReasoner()
+    errors = reasoner.validate_rules_dict(data)
+
+    assert any("duplicates" in error for error in errors)
+    assert any("weight must be" in error for error in errors)

@@ -7,7 +7,8 @@ import click
 from rich.console import Console
 
 from compliance_agent.engine.checker import ComplianceChecker
-from compliance_agent.engine.reasoner import ComplianceReasoner, print_report
+from compliance_agent.engine.reasoner import ComplianceReasoner, RuleValidationError, print_report
+from compliance_agent.engine.reporting import write_report
 
 console = Console()
 
@@ -53,13 +54,61 @@ def monitor(source, query, reset):
 def check(policy, rules, regulations, baseline, threshold):
     """Run a full compliance check on a policy document."""
     checker = ComplianceChecker()
-    checker.full_check(
-        policy_path=policy,
-        rules_path=rules,
-        regulations_dir=regulations,
-        baseline_path=baseline,
-        threshold=threshold,
+    try:
+        checker.full_check(
+            policy_path=policy,
+            rules_path=rules,
+            regulations_dir=regulations,
+            baseline_path=baseline,
+            threshold=threshold,
+        )
+    except RuleValidationError as e:
+        console.print("[red]Rules validation failed:[/red]")
+        for error in e.errors:
+            console.print(f"  - {error}")
+        sys.exit(1)
+
+
+@main.command()
+@click.option("--policy", "-p", required=True, help="Policy document to check")
+@click.option("--rules", "-r", required=True, help="YAML rules file")
+@click.option("--output", "-o", required=True, help="Report output path (.json or .md)")
+@click.option("--threshold", default=0.5, type=float, help="Decision threshold (default: 0.5)")
+def report(policy, rules, output, threshold):
+    """Generate a shareable compliance review report."""
+    reasoner = ComplianceReasoner(threshold=threshold)
+    try:
+        rule_list = reasoner.load_rules(rules)
+    except RuleValidationError as e:
+        console.print("[red]Rules validation failed:[/red]")
+        for error in e.errors:
+            console.print(f"  - {error}")
+        sys.exit(1)
+
+    policy_text = Path(policy).read_text(encoding="utf-8")
+    compliance_report = reasoner.evaluate_policy(policy_text, rule_list)
+    output_path = write_report(
+        compliance_report,
+        output,
+        metadata={"policy": policy, "rules": rules, "threshold": threshold},
     )
+    console.print(f"[green]Report written:[/green] {output_path}")
+
+
+@main.command("validate-rules")
+@click.option("--rules", "-r", required=True, help="YAML rules file")
+def validate_rules(rules):
+    """Validate a YAML rules file before using it in checks."""
+    reasoner = ComplianceReasoner()
+    errors = reasoner.validate_rules_file(rules)
+    if errors:
+        console.print("[red]Rules validation failed:[/red]")
+        for error in errors:
+            console.print(f"  - {error}")
+        sys.exit(1)
+
+    rule_list = reasoner.load_rules(rules)
+    console.print(f"[green]Rules are valid.[/green] Loaded {len(rule_list)} rule(s).")
 
 
 @main.command()
@@ -93,7 +142,13 @@ def reason(scenario, rules, threshold):
         facts = {f["predicate"]: f.get("value", 1.0) for f in facts}
 
     reasoner = ComplianceReasoner(threshold=threshold)
-    rule_list = reasoner.load_rules(rules)
+    try:
+        rule_list = reasoner.load_rules(rules)
+    except RuleValidationError as e:
+        console.print("[red]Rules validation failed:[/red]")
+        for error in e.errors:
+            console.print(f"  - {error}")
+        sys.exit(1)
 
     console.print(f"[bold]Scenario:[/bold] {data.get('scenario', {}).get('description', scenario)}")
     console.print(f"[dim]Evaluating {len(rule_list)} rules against {len(facts)} facts...[/dim]")
@@ -120,3 +175,7 @@ def dashboard(port):
     console.print(f"[green]Launching dashboard at http://localhost:{port}[/green]")
     sys.argv = ["streamlit", "run", str(dashboard_path), f"--server.port={port}"]
     stcli.main()
+
+
+if __name__ == "__main__":
+    main()

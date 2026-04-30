@@ -13,6 +13,8 @@ from rich.table import Table
 
 console = Console()
 
+VALID_RULE_TYPES = {"obligation", "permission", "prohibition"}
+
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
@@ -41,6 +43,7 @@ class RuleResult:
     passed: bool
     strength: float
     predicates_matched: list[dict] = field(default_factory=list)
+    predicate_results: list[dict] = field(default_factory=list)
     explanation: str = ""
 
 
@@ -62,6 +65,14 @@ class ComplianceReport:
     @property
     def total_count(self) -> int:
         return len(self.results)
+
+
+class RuleValidationError(ValueError):
+    """Raised when a rules file cannot be safely evaluated."""
+
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__("\n".join(errors))
 
 
 # ---------------------------------------------------------------------------
@@ -140,24 +151,71 @@ def extract_predicate(predicate: Predicate, text: str) -> dict:
     """
     keywords = _parse_condition_keywords(predicate.condition)
     matches = []
+    negated_matches = []
+    snippets = []
     for kw in keywords:
         pattern = re.compile(re.escape(kw), re.IGNORECASE)
-        found = len(pattern.findall(text))
-        if found:
-            matches.append({"keyword": kw, "count": found})
+        found = list(pattern.finditer(text))
+        positive_count = 0
+        negated_count = 0
+        for match in found:
+            if _is_negated(text, match.start()):
+                negated_count += 1
+                snippets.append(_build_snippet(text, match.start(), match.end(), kw, negated=True))
+            else:
+                positive_count += 1
+                snippets.append(_build_snippet(text, match.start(), match.end(), kw, negated=False))
+        if positive_count:
+            matches.append({"keyword": kw, "count": positive_count})
+        if negated_count:
+            negated_matches.append({"keyword": kw, "count": negated_count})
 
     if not matches:
-        return {"name": predicate.name, "matched": False, "score": 0.0, "evidence": []}
+        evidence = [f"'{m['keyword']}' negated {m['count']} time(s)" for m in negated_matches]
+        return {"name": predicate.name, "matched": False, "score": 0.0, "evidence": evidence, "snippets": snippets}
 
-    score = min(1.0, sum(m["count"] for m in matches) * 0.5)
+    score = min(1.0, sum(m["count"] for m in matches))
     weighted_score = score * predicate.weight
 
     return {
         "name": predicate.name,
         "matched": True,
         "score": weighted_score,
-        "evidence": [f"'{m['keyword']}' found {m['count']} time(s)" for m in matches],
+        "evidence": [f"'{m['keyword']}' found {m['count']} time(s)" for m in matches]
+        + [f"'{m['keyword']}' negated {m['count']} time(s)" for m in negated_matches],
+        "snippets": snippets,
     }
+
+
+def _build_snippet(text: str, start: int, end: int, keyword: str, negated: bool) -> dict:
+    """Return compact local evidence around a predicate match."""
+    snippet_start = max(0, start - 80)
+    snippet_end = min(len(text), end + 80)
+    snippet = " ".join(text[snippet_start:snippet_end].split())
+    return {
+        "keyword": keyword,
+        "negated": negated,
+        "start": start,
+        "end": end,
+        "text": snippet,
+    }
+
+
+def _is_negated(text: str, match_start: int) -> bool:
+    """Detect simple local negation before a keyword match."""
+    window = text[max(0, match_start - 30):match_start].lower()
+    negation_patterns = (
+        r"\bdo\s+not\b",
+        r"\bdoes\s+not\b",
+        r"\bwill\s+not\b",
+        r"\bmust\s+not\b",
+        r"\bshall\s+not\b",
+        r"\bno\b",
+        r"\bnot\b",
+        r"\bnever\b",
+        r"\bwithout\b",
+    )
+    return any(re.search(pattern, window) for pattern in negation_patterns)
 
 
 def _parse_condition_keywords(condition: str) -> list[str]:
@@ -168,6 +226,8 @@ def _parse_condition_keywords(condition: str) -> list[str]:
     # Extract quoted phrases
     quoted = re.findall(r"['\"]([^'\"]+)['\"]", condition)
     keywords.extend(quoted)
+    if keywords:
+        return list(dict.fromkeys(keywords))
 
     # Also extract key terms after "contains" or "mentions"
     terms = re.findall(r'(?:contains|mentions|references)\s+["\']?([a-z_\s]+)["\']?', condition_lower)
@@ -211,6 +271,10 @@ class ComplianceReasoner:
 
     def parse_rules_dict(self, data: dict) -> list[ComplianceRule]:
         """Parse rules from an already-loaded YAML dict (for dashboard/API use)."""
+        errors = self.validate_rules_dict(data)
+        if errors:
+            raise RuleValidationError(errors)
+
         rules = []
         for r in data.get("rules", []):
             predicates = [
@@ -230,6 +294,71 @@ class ComplianceReasoner:
                 )
             )
         return rules
+
+    def validate_rules_file(self, rules_path: str) -> list[str]:
+        """Return validation errors for a YAML rules file."""
+        path = Path(rules_path)
+        if not path.exists():
+            return [f"Rules file not found: {rules_path}"]
+
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            return [f"Invalid YAML: {e}"]
+
+        return self.validate_rules_dict(data)
+
+    def validate_rules_dict(self, data: dict) -> list[str]:
+        """Validate the community rule-pack schema used by the reasoner."""
+        errors = []
+        if not isinstance(data, dict):
+            return ["Rules file must be a YAML mapping with a top-level 'rules' list."]
+
+        rules = data.get("rules")
+        if not isinstance(rules, list) or not rules:
+            return ["Rules file must contain a non-empty top-level 'rules' list."]
+
+        seen_ids = set()
+        for index, rule in enumerate(rules, 1):
+            prefix = f"rules[{index}]"
+            if not isinstance(rule, dict):
+                errors.append(f"{prefix} must be a mapping.")
+                continue
+
+            rule_id = rule.get("id")
+            if not isinstance(rule_id, str) or not rule_id.strip():
+                errors.append(f"{prefix}.id is required and must be a non-empty string.")
+            elif rule_id in seen_ids:
+                errors.append(f"{prefix}.id duplicates '{rule_id}'.")
+            else:
+                seen_ids.add(rule_id)
+
+            rule_type = rule.get("type")
+            if rule_type not in VALID_RULE_TYPES:
+                errors.append(f"{prefix}.type must be one of: {', '.join(sorted(VALID_RULE_TYPES))}.")
+
+            if not isinstance(rule.get("description"), str) or not rule["description"].strip():
+                errors.append(f"{prefix}.description is required and must be a non-empty string.")
+
+            predicates = rule.get("predicates")
+            if not isinstance(predicates, list) or not predicates:
+                errors.append(f"{prefix}.predicates must be a non-empty list.")
+                continue
+
+            for pred_index, predicate in enumerate(predicates, 1):
+                pred_prefix = f"{prefix}.predicates[{pred_index}]"
+                if not isinstance(predicate, dict):
+                    errors.append(f"{pred_prefix} must be a mapping.")
+                    continue
+                if not isinstance(predicate.get("name"), str) or not predicate["name"].strip():
+                    errors.append(f"{pred_prefix}.name is required and must be a non-empty string.")
+                if not isinstance(predicate.get("condition"), str) or not predicate["condition"].strip():
+                    errors.append(f"{pred_prefix}.condition is required and must be a non-empty string.")
+                weight = predicate.get("weight", 1.0)
+                if not isinstance(weight, (int, float)) or weight <= 0 or weight > 1:
+                    errors.append(f"{pred_prefix}.weight must be a number greater than 0 and at most 1.")
+
+        return errors
 
     def evaluate_policy(self, policy_text: str, rules: list[ComplianceRule]) -> ComplianceReport:
         """Evaluate a policy document against a set of compliance rules."""
@@ -272,23 +401,17 @@ class ComplianceReasoner:
     def _evaluate_rule(self, rule: ComplianceRule, text: str) -> RuleResult:
         """Evaluate a single rule against policy text."""
         predicate_results = [extract_predicate(p, text) for p in rule.predicates]
-
-        scores = [p["score"] for p in predicate_results]
-
-        if not scores:
-            strength = 0.0
-        else:
-            strength = sum(scores) / len(scores)
-
+        evidence_strength = self._aggregate_scores([p["score"] for p in predicate_results])
+        strength = self._compliance_strength(rule.type, evidence_strength)
         passed = strength >= self.threshold
 
         evidence = []
         for p in predicate_results:
-            status = "PASS" if p["matched"] else "MISS"
+            status = "FOUND" if p["matched"] else "MISSING"
             evidence.append(f"[{status}] {p['name']}: {', '.join(p['evidence']) if p['evidence'] else 'no match'}")
 
         explanation = f"{rule.type.upper()}: {rule.description}. " + " | ".join(evidence)
-        explanation += f" (strength={strength:.2f}, threshold={self.threshold})"
+        explanation += f" (evidence={evidence_strength:.2f}, compliance_strength={strength:.2f}, threshold={self.threshold})"
 
         return RuleResult(
             rule_id=rule.id,
@@ -297,6 +420,7 @@ class ComplianceReasoner:
             passed=passed,
             strength=strength,
             predicates_matched=[p for p in predicate_results if p["matched"]],
+            predicate_results=predicate_results,
             explanation=explanation,
         )
 
@@ -314,20 +438,12 @@ class ComplianceReasoner:
         else:
             aggregated = 0.0
 
-        # Apply deontic operator
-        if rule.type == "obligation":
-            strength = self.ddl.obligation(aggregated)
-        elif rule.type == "permission":
-            strength = self.ddl.permission(aggregated)
-        elif rule.type == "prohibition":
-            strength = self.ddl.prohibition(aggregated)
-        else:
-            strength = aggregated
+        strength = self._compliance_strength(rule.type, aggregated)
 
         passed = strength >= self.threshold
 
         details = ", ".join(f"{pv['name']}={pv['value']:.2f}" for pv in predicate_values)
-        explanation = f"{rule.type.upper()}: {rule.description}. Predicates: {details}. Strength={strength:.2f}"
+        explanation = f"{rule.type.upper()}: {rule.description}. Predicates: {details}. Compliance strength={strength:.2f}"
 
         return RuleResult(
             rule_id=rule.id,
@@ -336,8 +452,23 @@ class ComplianceReasoner:
             passed=passed,
             strength=strength,
             predicates_matched=[pv for pv in predicate_values if pv["value"] >= self.threshold],
+            predicate_results=predicate_values,
             explanation=explanation,
         )
+
+    def _aggregate_scores(self, scores: list[float]) -> float:
+        if not scores:
+            return 0.0
+        return sum(scores) / len(scores)
+
+    def _compliance_strength(self, rule_type: str, evidence_strength: float) -> float:
+        if rule_type == "obligation":
+            return self.ddl.obligation(evidence_strength)
+        if rule_type == "permission":
+            return self.ddl.permission(evidence_strength)
+        if rule_type == "prohibition":
+            return self.ddl.prohibition(evidence_strength)
+        return evidence_strength
 
     def _calculate_overall_score(self, results: list[RuleResult]) -> float:
         if not results:
