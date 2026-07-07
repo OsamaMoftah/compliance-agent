@@ -17,7 +17,7 @@ def _embeddings_class():
     try:
         from langchain_huggingface import HuggingFaceEmbeddings
     except ImportError:
-        from langchain_community.embeddings import HuggingFaceEmbeddings
+        from langchain_community.embeddings import HuggingFaceEmbeddings  # type: ignore[no-redef]
     return HuggingFaceEmbeddings
 
 
@@ -25,7 +25,7 @@ def _chroma_class():
     try:
         from langchain_chroma import Chroma
     except ImportError:
-        from langchain_community.vectorstores import Chroma
+        from langchain_community.vectorstores import Chroma  # type: ignore[no-redef]
     return Chroma
 
 

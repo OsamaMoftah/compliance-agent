@@ -69,3 +69,5 @@ jobs:
           pip install -e ".[rag,dev]"
       - name: Run full test suite
         run: pytest --cov=src/compliance_agent --cov-report=term
+      - name: Type-check against the RAG extra
+        run: mypy src/
