@@ -10,6 +10,8 @@ from compliance_agent.engine.reasoner import ComplianceReasoner, ComplianceRepor
 
 console = Console()
 
+_RISK_STYLES = {"LOW": "bold green", "MEDIUM": "bold yellow", "HIGH": "bold red"}
+
 
 class ComplianceChecker:
     """Orchestrator for end-to-end compliance checking.
@@ -43,6 +45,7 @@ class ComplianceChecker:
         regulations_dir: Optional[str] = None,
         baseline_path: Optional[str] = None,
         threshold: float = 0.5,
+        verbose: bool = False,
     ) -> dict:
         """Run a complete compliance check on a policy document.
 
@@ -52,12 +55,16 @@ class ComplianceChecker:
             regulations_dir: Optional directory of regulatory docs for RAG context.
             baseline_path: Optional previous version for drift comparison.
             threshold: Decision threshold for rule evaluation.
+            verbose: Show full per-rule explanations.
 
         Returns:
             Dict with full results.
         """
-        policy_text = Path(policy_path).read_text(encoding="utf-8")
-        policy_name = Path(policy_path).name
+        policy_file = Path(policy_path)
+        if not policy_file.exists():
+            raise FileNotFoundError(f"Policy file not found: {policy_path}")
+        policy_text = policy_file.read_text(encoding="utf-8")
+        policy_name = policy_file.name
 
         console.print(Panel(f"[bold]Compliance Check: {policy_name}[/bold]", style="blue"))
         console.print()
@@ -70,7 +77,7 @@ class ComplianceChecker:
         # 2. Rule reasoning
         console.print("\n[bold]Step 1: Rule Evaluation[/bold]")
         report = reasoner.evaluate_policy(policy_text, rules)
-        print_report(report)
+        print_report(report, verbose=verbose)
 
         # 3. Drift detection (if baseline provided)
         drift_result = None
@@ -94,14 +101,18 @@ class ComplianceChecker:
                 console.print(f"[yellow]RAG context skipped: {e}[/yellow]")
 
         # 5. Summary
+        breakdown = report.severity_breakdown()
+        breakdown_text = ", ".join(f"{count} {sev}" for sev, count in breakdown.items() if count) or "none"
         console.print()
         console.print(Panel(
             f"Policy: {policy_name}\n"
-            f"Rules passed: {report.passed_count}/{report.total_count}\n"
+            f"Rules passed: {report.passed_count}/{report.applicable_count} applicable"
+            f" ({report.na_count} not applicable, {report.warn_count} marginal)\n"
+            f"Failures by severity: {breakdown_text}\n"
             f"Overall score: {report.overall_score:.2f}\n"
             f"Risk level: {report.risk_level}",
             title="Check Summary",
-            style="bold green" if report.risk_level == "LOW" else "bold yellow",
+            style=_RISK_STYLES.get(report.risk_level, "bold yellow"),
         ))
 
         return {

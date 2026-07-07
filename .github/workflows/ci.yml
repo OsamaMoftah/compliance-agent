@@ -7,7 +7,31 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src/ tests/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: mypy src/
+
+  # Core tests run against the lightweight install (no ML stack): reasoner,
+  # reporting, CLI, and stubbed drift. RAG tests skip themselves here.
+  test-core:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -20,24 +44,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests
-        run: pytest --cov=src/compliance_agent --cov-report=term
+      - name: Run tests with coverage gate
+        run: pytest --cov=src/compliance_agent --cov-report=term --cov-fail-under=80
 
-      - name: Lint
-        run: ruff check src/ tests/
-
-  typecheck:
+  # Full-stack job installs the RAG extra so embedding/vector-store tests run.
+  test-full:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
-      - run: ruff check src/ tests/
+          cache: pip
+      - name: Install all extras
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[rag,dev]"
+      - name: Run full test suite
+        run: pytest --cov=src/compliance_agent --cov-report=term

@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("langchain_text_splitters", reason="langchain-text-splitters not installed")
-pytest.importorskip("langchain_community", reason="langchain-community not installed")
+pytest.importorskip("chromadb", reason="chromadb not installed")
+pytest.importorskip("sentence_transformers", reason="sentence-transformers not installed")
 
 from compliance_agent.engine.rag import RegulatoryRAG
 
@@ -39,6 +40,16 @@ def test_query(sample_regulations):
     assert len(results) > 0
     assert "source" in results[0]
     assert "content" in results[0]
+    assert 0.0 < results[0]["relevance"] <= 1.0
+
+
+def test_reingest_is_idempotent(sample_regulations):
+    rag = RegulatoryRAG(persist_dir=os.path.join(sample_regulations, ".chroma"))
+    rag.ingest_directory(sample_regulations, reset=True)
+    first = rag.vectorstore.get()
+    rag.ingest_directory(sample_regulations)  # no reset: must upsert, not duplicate
+    second = rag.vectorstore.get()
+    assert len(second["ids"]) == len(first["ids"])
 
 
 def test_query_without_index():
