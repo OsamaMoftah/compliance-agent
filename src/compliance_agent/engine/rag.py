@@ -14,19 +14,26 @@ DEFAULT_PERSIST_DIR = ".chroma"
 
 
 def _embeddings_class():
+    # Imported dynamically (not `from x import Y`) so mypy sees a single Any-typed
+    # result regardless of which optional package is installed, instead of two
+    # static class definitions that only conflict under some install profiles.
+    import importlib
+
     try:
-        from langchain_huggingface import HuggingFaceEmbeddings
+        module = importlib.import_module("langchain_huggingface")
     except ImportError:
-        from langchain_community.embeddings import HuggingFaceEmbeddings  # type: ignore[no-redef]
-    return HuggingFaceEmbeddings
+        module = importlib.import_module("langchain_community.embeddings")
+    return module.HuggingFaceEmbeddings
 
 
 def _chroma_class():
+    import importlib
+
     try:
-        from langchain_chroma import Chroma
+        module = importlib.import_module("langchain_chroma")
     except ImportError:
-        from langchain_community.vectorstores import Chroma  # type: ignore[no-redef]
-    return Chroma
+        module = importlib.import_module("langchain_community.vectorstores")
+    return module.Chroma
 
 
 class RegulatoryRAG:
