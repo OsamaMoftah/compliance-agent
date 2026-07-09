@@ -1,110 +1,208 @@
+schema_version: 2
+
 rules:
   - id: "GDPR-CONSENT-001"
     type: "obligation"
+    severity: "critical"
+    citation: "GDPR Art. 6(1)(a), Art. 7"
     description: "Consent must be obtained before processing personal data"
     predicates:
       - name: "has_consent"
-        condition: "document contains 'explicit user consent' or 'affirmative action'"
+        keywords:
+          - "explicit user consent"
+          - "explicit consent"
+          - "affirmative action"
+          - "obtain consent"
+          - "consent is obtained"
         weight: 1.0
 
   - id: "GDPR-TRANSFER-001"
     type: "obligation"
+    severity: "major"
+    citation: "GDPR Ch. V, Art. 44-49"
     description: "Cross-border data transfers require adequate safeguards"
+    applies_when:
+      - name: "transfers_data_outside_eu"
+        keywords:
+          - "transfer personal data outside"
+          - "transferred outside the EU"
+          - "transferred to the United States"
+          - "third countries"
+          - "international transfer"
     predicates:
       - name: "has_safeguards"
-        condition: "document mentions SCCs, BCRs, or adequacy decision"
-        weight: 0.9
-      - name: "transfers_outside_eu"
-        condition: "document mentions transfer outside EU or to third countries"
-        weight: 0.8
+        keywords:
+          - "standard contractual clauses"
+          - "SCCs"
+          - "binding corporate rules"
+          - "BCRs"
+          - "adequacy decision"
+          - "adequate safeguards"
+        weight: 1.0
 
   - id: "GDPR-RETENTION-001"
     type: "obligation"
+    severity: "major"
+    citation: "GDPR Art. 5(1)(e)"
     description: "Data must not be retained longer than necessary"
     predicates:
       - name: "has_retention_policy"
-        condition: "document specifies data retention period"
+        keywords:
+          - "retention period"
+          - "retained for"
+          - "retention policy"
+          - "retained no longer than"
         weight: 0.7
       - name: "has_deletion_mechanism"
-        condition: "document allows deletion or anonymization of data"
+        keywords:
+          - "request deletion"
+          - "request anonymization"
+          - "delete their data"
+          - "delete their personal data"
+          - "deletion of their data"
+          - "right to erasure"
         weight: 0.8
 
   - id: "GDPR-AUTOMATED-001"
     type: "obligation"
+    severity: "major"
+    citation: "GDPR Art. 22"
     description: "Automated decision-making must be disclosed with opt-out"
-    predicates:
+    applies_when:
+      # Gate on *usage* phrasing, not topic mentions: a section heading like
+      # "Automated Decision Making" above a "we do not profile" paragraph
+      # must not activate this rule.
       - name: "uses_automated_processing"
-        condition: "document mentions profiling or automated decision-making"
-        weight: 0.6
+        keywords:
+          - "use automated profiling"
+          - "uses automated profiling"
+          - "use automated decision"
+          - "uses automated decision"
+          - "profiling for"
+    predicates:
       - name: "has_opt_out"
-        condition: "document provides opt-out from automated processing"
-        weight: 0.9
+        keywords:
+          - "opt out"
+          - "opt-out"
+          - "object to automated"
+          - "human intervention"
+        weight: 1.0
 
   - id: "GDPR-SECURITY-001"
     type: "obligation"
+    severity: "critical"
+    citation: "GDPR Art. 32"
     description: "Appropriate technical and organizational security measures required"
     predicates:
       - name: "has_encryption"
-        condition: "document mentions encryption"
+        keywords: ["encryption", "encrypted"]
         weight: 0.8
       - name: "has_access_controls"
-        condition: "document mentions access controls"
+        keywords: ["access control", "access controls"]
         weight: 0.7
       - name: "has_security_audits"
-        condition: "document mentions security audits or assessments"
+        keywords: ["security audit", "security audits", "security assessment", "security assessments"]
         weight: 0.7
 
   - id: "GDPR-RIGHTS-001"
     type: "obligation"
+    severity: "critical"
+    citation: "GDPR Ch. III, Art. 15-17"
     description: "Users must be able to exercise their data subject rights"
     predicates:
       - name: "has_access_right"
-        condition: "document guarantees right to access data"
+        keywords: ["right to access", "access their personal data", "access their data", "right to access, rectify"]
         weight: 0.8
       - name: "has_rectification_right"
-        condition: "document guarantees right to rectify data"
+        keywords: ["rectify", "rectification", "correct their data"]
         weight: 0.7
       - name: "has_erasure_right"
-        condition: "document guarantees right to delete data"
+        keywords: ["request deletion", "delete their personal data", "delete their data", "deletion of their data", "erasure", "delete, and port"]
         weight: 0.8
 
   - id: "GDPR-SHARING-001"
     type: "prohibition"
-    description: "Data must not be shared without lawful basis or DPA"
+    severity: "critical"
+    citation: "GDPR Art. 28"
+    description: "Data must not be shared with third parties without a data processing agreement"
+    applies_when:
+      - name: "shares_with_third_parties"
+        keywords:
+          - "third party"
+          - "third parties"
+          - "third-party"
     predicates:
       - name: "shares_with_third_parties"
-        condition: "document mentions sharing data with third parties"
-        weight: 0.5
+        keywords:
+          - "shared with third"
+          - "share data with third"
+          - "shared with third-party"
+          - "sell data"
+          - "sold to third"
+        weight: 1.0
+    unless:
       - name: "has_dpa"
-        condition: "document mentions data processing agreements"
-        weight: 0.9
+        keywords:
+          - "data processing agreement"
+          - "data processing agreements"
+        weight: 1.0
 
   - id: "AI-ACT-HIGH-RISK-001"
     type: "obligation"
+    severity: "critical"
+    citation: "EU AI Act Art. 43"
     description: "High-risk AI systems require conformity assessment"
-    predicates:
+    applies_when:
       - name: "is_high_risk_ai"
-        condition: "document mentions high-risk AI or AI system used in regulated context"
-        weight: 0.8
+        keywords:
+          - "high-risk AI"
+          - "high risk AI"
+    predicates:
       - name: "has_conformity_assessment"
-        condition: "document mentions conformity assessment or compliance evaluation"
-        weight: 0.9
+        keywords:
+          - "conformity assessment"
+          - "compliance evaluation"
+        weight: 1.0
 
   - id: "AI-ACT-TRANSPARENCY-001"
     type: "obligation"
+    severity: "major"
+    citation: "EU AI Act Art. 13"
     description: "AI systems must be transparent and explainable"
-    predicates:
+    applies_when:
       - name: "uses_ai"
-        condition: "document mentions AI, ML, or automated system"
-        weight: 0.6
+        keywords:
+          - "AI system"
+          - "AI systems"
+          - "artificial intelligence"
+          - "machine learning"
+    predicates:
       - name: "has_transparency"
-        condition: "document mentions explainability, transparency, or interpretability"
-        weight: 0.9
+        keywords:
+          - "explainability"
+          - "explainable"
+          - "transparency"
+          - "interpretability"
+          - "bias audit"
+          - "bias audits"
+        weight: 1.0
 
   - id: "AI-ACT-OVERSIGHT-001"
     type: "obligation"
+    severity: "critical"
+    citation: "EU AI Act Art. 14"
     description: "Human oversight required for high-risk AI systems"
+    applies_when:
+      - name: "uses_ai"
+        keywords:
+          - "AI system"
+          - "AI systems"
+          - "artificial intelligence"
+          - "machine learning"
     predicates:
       - name: "has_human_oversight"
-        condition: "document mentions human oversight or human review"
-        weight: 0.9
+        keywords:
+          - "human oversight"
+          - "human review"
+          - "human in the loop"
+        weight: 1.0

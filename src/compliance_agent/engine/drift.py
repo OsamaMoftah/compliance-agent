@@ -16,11 +16,11 @@ class DriftBridge:
     """
 
     def __init__(self):
-        self._legaldrift = None
+        self._legaldrift: dict = {}
 
-    def _ensure_legaldrift(self):
-        if self._legaldrift is not None:
-            return
+    def _ensure_legaldrift(self) -> dict:
+        if self._legaldrift:
+            return self._legaldrift
         try:
             from legaldrift import DriftDetector, EmbeddingEngine, LegalDocument
 
@@ -31,8 +31,9 @@ class DriftBridge:
             }
         except ImportError:
             raise RuntimeError(
-                "LegalDrift is not installed. Install it with: pip install legaldrift"
+                "LegalDrift is not installed. Install it with: pip install 'compliance-agent[drift]'"
             )
+        return self._legaldrift
 
     def detect(
         self,
@@ -40,6 +41,7 @@ class DriftBridge:
         current_path: str,
         chunked: bool = False,
         output_format: str = "table",
+        threshold: float = 0.05,
     ) -> dict:
         """Detect semantic drift between two policy documents.
 
@@ -48,17 +50,22 @@ class DriftBridge:
             current_path: Path to the updated policy version.
             chunked: If True, do section-by-section comparison.
             output_format: 'table' or 'json'.
+            threshold: Detection p-value threshold passed to LegalDrift.
 
         Returns:
             Dict with drift detection results.
         """
-        self._ensure_legaldrift()
+        legaldrift = self._ensure_legaldrift()
+
+        for path, label in ((baseline_path, "Baseline"), (current_path, "Current")):
+            if not Path(path).exists():
+                raise FileNotFoundError(f"{label} policy file not found: {path}")
 
         baseline_text = Path(baseline_path).read_text(encoding="utf-8")
         current_text = Path(current_path).read_text(encoding="utf-8")
 
-        engine = self._legaldrift["EmbeddingEngine"]()
-        detector = self._legaldrift["DriftDetector"](threshold=0.05)
+        engine = legaldrift["EmbeddingEngine"]()
+        detector = legaldrift["DriftDetector"](threshold=threshold)
 
         if chunked:
             return self._detect_chunked(baseline_text, current_text, engine, detector, output_format)
@@ -103,8 +110,9 @@ class DriftBridge:
     ) -> dict:
         from legaldrift import align_chunks, chunk_by_sections
 
-        doc1 = self._legaldrift["LegalDocument"](text=baseline_text, document_id="baseline")
-        doc2 = self._legaldrift["LegalDocument"](text=current_text, document_id="current")
+        legaldrift = self._ensure_legaldrift()
+        doc1 = legaldrift["LegalDocument"](text=baseline_text, document_id="baseline")
+        doc2 = legaldrift["LegalDocument"](text=current_text, document_id="current")
 
         chunks1 = chunk_by_sections(doc1)
         chunks2 = chunk_by_sections(doc2)

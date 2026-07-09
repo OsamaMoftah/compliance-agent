@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "compliance-agent"
-version = "0.1.0"
-description = "End-to-end compliance monitoring agent: regulatory RAG + semantic drift detection + differentiable rule reasoning"
+version = "0.2.0"
+description = "Compliance screening copilot: explainable rule reasoning, regulatory RAG, and policy drift detection"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{name = "Osama Moftah"}]
 keywords = [
     "compliance",
@@ -30,31 +30,36 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+# Core install is lightweight: the rule reasoner, reports, and CLI need no ML stack.
 dependencies = [
-    "legaldrift>=0.1.0",
-    "langchain>=0.3.0,<2.0.0",
-    "langchain-text-splitters>=0.3.0,<1.0.0",
-    "langchain-openai>=0.2.0,<2.0.0",
-    "langchain-community>=0.3.0,<1.0.0",
-    "chromadb>=0.5.0,<1.0.0",
-    "sentence-transformers>=3.0.0,<4.0.0",
-    "streamlit>=1.35.0,<2.0.0",
-    "rich>=13.0.0,<14.0.0",
+    "rich>=13.0.0,<15.0.0",
     "click>=8.1.0,<9.0.0",
-    "pydantic>=2.0.0,<3.0.0",
     "pyyaml>=6.0.0,<7.0.0",
-    "python-dotenv>=1.0.0,<2.0.0",
-    "pandas>=2.0.0,<3.0.0",
-    "plotly>=5.18.0,<6.0.0",
 ]
 
 [project.optional-dependencies]
+rag = [
+    "langchain-text-splitters>=0.3.0,<1.0.0",
+    "langchain-huggingface>=0.1.0,<1.0.0",
+    "langchain-chroma>=0.1.0,<1.0.0",
+    "chromadb>=0.5.0,<2.0.0",
+    "sentence-transformers>=3.0.0,<6.0.0",
+]
+drift = [
+    "legaldrift>=0.1.0",
+]
+dashboard = [
+    "streamlit>=1.35.0,<2.0.0",
+]
+all = [
+    "compliance-agent[rag,drift,dashboard]",
+]
 dev = [
     "pytest>=8.0.0,<9.0.0",
-    "pytest-cov>=5.0.0,<6.0.0",
-    "black>=24.0.0,<25.0.0",
-    "isort>=5.13.0,<6.0.0",
+    "pytest-cov>=5.0.0,<8.0.0",
     "ruff>=0.4.0,<1.0.0",
+    "mypy>=1.10.0,<2.0.0",
+    "types-PyYAML>=6.0.0,<7.0.0",
 ]
 
 [project.scripts]
@@ -63,14 +68,6 @@ compliance-agent = "compliance_agent.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.black]
-line-length = 130
-target-version = ["py310"]
-
-[tool.isort]
-profile = "black"
-line_length = 130
-
 [tool.ruff]
 line-length = 130
 target-version = "py310"
@@ -78,6 +75,20 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 
+[tool.mypy]
+# No pinned python_version: CI always runs mypy under the interpreter that will
+# actually execute it (3.12 in both the typecheck and test-full jobs). Pinning
+# to an older target broke on third-party stubs (e.g. numpy) that use newer
+# syntax (PEP 695 `type` statements) unconditionally in their .pyi files.
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.coverage.run]
+omit = [
+    "*/dashboard/*",
+]

@@ -1,43 +1,86 @@
-fabric:
-  version: "0.1.0"
-
 scenario:
   id: "privacy-policy-check-001"
   description: "GDPR and AI Act compliance check for company privacy policy"
   jurisdiction: "EU"
 
+  # Fact names correspond to predicate / applies_when / unless names in
+  # sample_data/rules/gdpr_rules.yaml. Values are confidence levels in [0, 1].
   facts:
-    - predicate: "collects_personal_data"
-      value: 1.0
-      evidence: "Policy states collection of name, email, and job title"
-
-    - predicate: "has_consent_mechanism"
+    - predicate: "has_consent"
       value: 1.0
       evidence: "Explicit user consent mentioned in Data Collection section"
 
     - predicate: "transfers_data_outside_eu"
       value: 0.8
-      evidence: "Mentions transfer to United States under SCCs"
+      evidence: "Mentions transfer to United States"
+
+    - predicate: "has_safeguards"
+      value: 0.9
+      evidence: "Transfers covered by Standard Contractual Clauses"
 
     - predicate: "uses_automated_processing"
       value: 0.7
       evidence: "Automated profiling for content recommendations"
 
+    - predicate: "has_opt_out"
+      value: 0.2
+      evidence: "No opt-out from automated profiling found"
+
     - predicate: "has_encryption"
       value: 1.0
       evidence: "Encryption at rest and in transit"
+
+    - predicate: "has_access_controls"
+      value: 0.9
+      evidence: "Role-based access controls documented"
+
+    - predicate: "has_security_audits"
+      value: 0.6
+      evidence: "Annual security audit mentioned without scope"
 
     - predicate: "has_retention_policy"
       value: 1.0
       evidence: "Retention period specified as account duration plus 24 months"
 
+    - predicate: "has_deletion_mechanism"
+      value: 1.0
+      evidence: "Users may request deletion or anonymization"
+
+    - predicate: "has_access_right"
+      value: 0.9
+      evidence: "Right to access guaranteed"
+
+    - predicate: "has_rectification_right"
+      value: 0.9
+      evidence: "Right to rectification guaranteed"
+
+    - predicate: "has_erasure_right"
+      value: 0.9
+      evidence: "Right to deletion guaranteed"
+
     - predicate: "shares_with_third_parties"
       value: 0.9
       evidence: "Data shared for service delivery, analytics, and marketing"
 
-    - predicate: "uses_ai_systems"
+    - predicate: "has_dpa"
+      value: 1.0
+      evidence: "Data processing agreements in place with all processors"
+
+    - predicate: "uses_ai"
       value: 0.8
       evidence: "AI systems for profiling, bias audits mentioned"
+
+    - predicate: "is_high_risk_ai"
+      value: 0.3
+      evidence: "Profiling for recommendations; not a regulated high-risk context"
+
+    - predicate: "has_conformity_assessment"
+      value: 0.2
+      evidence: "No conformity assessment documented"
+
+    - predicate: "has_transparency"
+      value: 0.7
+      evidence: "Bias audits and documentation of AI evaluations"
 
     - predicate: "has_human_oversight"
       value: 0.9

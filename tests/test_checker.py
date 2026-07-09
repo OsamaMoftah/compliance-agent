@@ -3,6 +3,8 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from compliance_agent.engine.checker import ComplianceChecker, check_policy
 
 
@@ -71,3 +73,57 @@ rules:
             threshold=0.3,
         )
         assert report.passed_count == 1
+
+
+def test_full_check_missing_policy_raises(tmp_path):
+    rules_path = tmp_path / "rules.yaml"
+    rules_path.write_text(
+        """
+rules:
+  - id: "T"
+    type: "obligation"
+    description: "Consent"
+    predicates:
+      - name: "has_consent"
+        keywords: ["consent"]
+"""
+    )
+    checker = ComplianceChecker()
+    with pytest.raises(FileNotFoundError, match="Policy file not found"):
+        checker.full_check(policy_path=str(tmp_path / "nope.txt"), rules_path=str(rules_path))
+
+
+def test_full_check_with_baseline_and_regulations(stub_legaldrift, tmp_path):
+    """Drift (stubbed) and RAG (gracefully skipped without ML deps) branches."""
+    policy = tmp_path / "policy_v2.txt"
+    policy.write_text("We obtain user consent before processing.", encoding="utf-8")
+    baseline = tmp_path / "policy_v1.txt"
+    baseline.write_text("We obtain consent before processing.", encoding="utf-8")
+    regulations = tmp_path / "regs"
+    regulations.mkdir()
+    (regulations / "gdpr.txt").write_text("Consent must be freely given.", encoding="utf-8")
+
+    rules_path = tmp_path / "rules.yaml"
+    rules_path.write_text(
+        """
+schema_version: 2
+rules:
+  - id: "T-CONSENT"
+    type: "obligation"
+    description: "Consent required"
+    predicates:
+      - name: "has_consent"
+        keywords: ["consent"]
+"""
+    )
+
+    checker = ComplianceChecker()
+    result = checker.full_check(
+        policy_path=str(policy),
+        rules_path=str(rules_path),
+        regulations_dir=str(regulations),
+        baseline_path=str(baseline),
+    )
+    assert result["report"].passed_count == 1
+    assert result["drift"] is not None
+    assert result["drift"]["chunked"] is True
