@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import shutil
 from pathlib import Path
 
 from rich.console import Console
@@ -66,7 +67,7 @@ class RegulatoryRAG:
             )
         return self._vectorstore
 
-    def ingest_directory(self, source_dir: str, reset: bool = False) -> int:
+    def ingest_directory(self, source_dir: str, reset: bool = False, emit_console: bool = True) -> int:
         """Ingest all .txt and .md files from a directory into the vector store.
 
         Returns the number of chunks ingested.
@@ -74,16 +75,24 @@ class RegulatoryRAG:
         source_path = Path(source_dir)
         if not source_path.exists():
             raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        if not source_path.is_dir():
+            raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
 
+        if reset:
+            self._validate_reset_target(source_path)
         if reset and os.path.exists(self.persist_dir):
-            import shutil
-
             shutil.rmtree(self.persist_dir)
             self._vectorstore = None
 
         text_files = sorted(source_path.rglob("*.txt")) + sorted(source_path.rglob("*.md"))
+        source_ids = {self._source_id(filepath, source_path) for filepath in text_files}
+        store = self.vectorstore
+
         if not text_files:
-            console.print("[yellow]No .txt or .md files found in source directory.[/yellow]")
+            if emit_console:
+                console.print("[yellow]No .txt or .md files found in source directory.[/yellow]")
+            if store is not None:
+                self._delete_stale_records(store, set(), set())
             return 0
 
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -100,31 +109,99 @@ class RegulatoryRAG:
             text = filepath.read_text(encoding="utf-8")
             if not text.strip():
                 continue
+            source_id = self._source_id(filepath, source_path)
+            source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
             chunks = splitter.create_documents(
                 [text],
-                metadatas=[{"source": filepath.name, "path": str(filepath)}],
+                metadatas=[
+                    {
+                        "source": source_id,
+                        "source_id": source_id,
+                        "source_sha256": source_hash,
+                    }
+                ],
             )
             for index, chunk in enumerate(chunks):
-                digest = hashlib.sha256(f"{filepath}::{index}::{chunk.page_content}".encode("utf-8")).hexdigest()
+                chunk.metadata.update(
+                    {
+                        "source": source_id,
+                        "source_id": source_id,
+                        "source_sha256": source_hash,
+                        "chunk_index": index,
+                    }
+                )
+                digest = hashlib.sha256(f"{source_id}::{index}::{chunk.page_content}".encode("utf-8")).hexdigest()
                 ids.append(digest)
                 all_docs.append(chunk)
 
         if not all_docs:
-            console.print("[yellow]No content found in source documents.[/yellow]")
+            if emit_console:
+                console.print("[yellow]No content found in source documents.[/yellow]")
+            if store is not None:
+                self._delete_stale_records(store, source_ids, set())
             return 0
 
-        console.print(f"[dim]Embedding {len(all_docs)} chunks with {self.model_name}...[/dim]")
-        store = self.vectorstore
+        if emit_console:
+            console.print(f"[dim]Embedding {len(all_docs)} chunks with {self.model_name}...[/dim]")
+        new_ids = set(ids)
         if store is None:
             store = _chroma_class()(
                 persist_directory=self.persist_dir,
                 embedding_function=self.embeddings,
             )
             self._vectorstore = store
-        # Deterministic content-hash IDs make this an upsert, not a duplicate.
-        store.add_documents(all_docs, ids=ids)
-        console.print(f"[green]Ingested {len(all_docs)} chunks from {len(text_files)} files.[/green]")
+        existing_ids = {record_id for record_id, _ in self._stored_records(store)} if store is not None else set()
+        additions = [(document, record_id) for document, record_id in zip(all_docs, ids) if record_id not in existing_ids]
+        added_ids = [record_id for _, record_id in additions]
+        try:
+            if additions:
+                store.add_documents([document for document, _ in additions], ids=added_ids)
+        except Exception:
+            if added_ids:
+                store.delete(ids=added_ids)
+            raise
+
+        self._delete_stale_records(store, source_ids, new_ids)
+        if emit_console:
+            console.print(f"[green]Ingested {len(all_docs)} chunks from {len(text_files)} files.[/green]")
         return len(all_docs)
+
+    @staticmethod
+    def _source_id(filepath: Path, source_path: Path) -> str:
+        """Return a stable, user-safe source identity relative to the corpus."""
+        return filepath.relative_to(source_path).as_posix()
+
+    def _validate_reset_target(self, source_path: Path) -> None:
+        """Reject destructive reset targets that are not dedicated data directories."""
+        persist_path = Path(self.persist_dir).expanduser().resolve()
+        source_resolved = source_path.resolve()
+        forbidden = {Path("/").resolve(), Path.home().resolve(), Path.cwd().resolve(), source_resolved}
+        if persist_path in forbidden or persist_path in source_resolved.parents or persist_path.name in {"", ".", ".."}:
+            raise ValueError("reset requires a safe persistence directory distinct from the source directory")
+        if persist_path.exists() and not persist_path.is_dir():
+            raise ValueError("reset requires a safe persistence directory, not a file")
+
+    @staticmethod
+    def _stored_records(store) -> list[tuple[str, dict]]:
+        data = store.get(include=["metadatas"])
+        ids = data.get("ids", [])
+        metadatas = data.get("metadatas", [])
+        return [
+            (record_id, metadata or {})
+            for record_id, metadata in zip(ids, metadatas)
+        ]
+
+    def _delete_stale_records(self, store, current_source_ids: set[str], current_ids: set[str]) -> None:
+        ids = [
+            record_id
+            for record_id, metadata in self._stored_records(store)
+            if (
+                metadata.get("source_id", metadata.get("source")) not in current_source_ids
+                or record_id not in current_ids
+            )
+        ]
+        if ids:
+            store.delete(ids=ids)
 
     def query(self, question: str, k: int = 5) -> list[dict]:
         """Query the vector store and return top-k results.

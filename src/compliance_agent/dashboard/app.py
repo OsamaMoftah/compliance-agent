@@ -11,6 +11,7 @@ from typing import Optional
 import streamlit as st
 import yaml
 
+from compliance_agent.dashboard.state import clear_search_state, filter_search_results, read_search_state, write_search_state
 from compliance_agent.engine.reasoner import (
     STATUS_FAIL,
     STATUS_NA,
@@ -162,28 +163,35 @@ with tab1:
                     with st.spinner("Ingesting documents..."):
                         rag = RegulatoryRAG()
                         count = rag.ingest_directory(reg_dir, reset=True)
+                    clear_search_state(st.session_state)
                     st.success(f"Ingested {count} chunks")
                     sources = rag.list_sources()
                     if sources:
                         st.info(f"Index contents: {', '.join(sources)}")
-                except FileNotFoundError as e:
+                except (FileNotFoundError, NotADirectoryError, RuntimeError, ValueError) as e:
+                    clear_search_state(st.session_state)
                     st.error(str(e))
 
         with col2:
             query_text = st.text_input("Query regulations", placeholder="e.g., What does the AI Act say about human oversight?")
             if query_text and st.button("Search"):
+                clear_search_state(st.session_state)
                 rag = RegulatoryRAG()
                 if rag.vectorstore is None:
                     st.warning("No index found. Ingest documents first.")
                 else:
                     results = rag.query(query_text, k=5)
-                    sources = sorted({r["source"] for r in results})
-                    chosen = st.selectbox("Filter by source", ["All"] + sources)
-                    for i, r in enumerate(results, 1):
-                        if chosen != "All" and r["source"] != chosen:
-                            continue
-                        with st.expander(f"#{i} [{r['source']}] — Relevance: {r['relevance']:.2f}"):
-                            st.markdown(r["content"])
+                    write_search_state(st.session_state, query_text, results)
+
+            search_state = read_search_state(st.session_state)
+            if search_state["results"]:
+                sources = sorted({r["source"] for r in search_state["results"]})
+                chosen = st.selectbox("Filter by source", ["All"] + sources, key="rag_source_filter")
+                filtered_results = filter_search_results(search_state["results"], chosen)
+                st.caption(f"Results for: {search_state['query']}")
+                for i, r in enumerate(filtered_results, 1):
+                    with st.expander(f"#{i} [{r['source']}] — Relevance: {r['relevance']:.2f}"):
+                        st.markdown(r["content"])
 
 # ---------------------------------------------------------------------------
 # Tab 2: Check Policy

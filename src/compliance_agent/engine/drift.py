@@ -42,6 +42,7 @@ class DriftBridge:
         chunked: bool = False,
         output_format: str = "table",
         threshold: float = 0.05,
+        emit_console: bool = True,
     ) -> dict:
         """Detect semantic drift between two policy documents.
 
@@ -68,9 +69,9 @@ class DriftBridge:
         detector = legaldrift["DriftDetector"](threshold=threshold)
 
         if chunked:
-            return self._detect_chunked(baseline_text, current_text, engine, detector, output_format)
+            return self._detect_chunked(baseline_text, current_text, engine, detector, output_format, emit_console)
         else:
-            return self._detect_full(baseline_text, current_text, engine, detector, output_format)
+            return self._detect_full(baseline_text, current_text, engine, detector, output_format, emit_console)
 
     def _detect_full(
         self,
@@ -79,6 +80,7 @@ class DriftBridge:
         engine,
         detector,
         output_format: str,
+        emit_console: bool,
     ) -> dict:
         emb1 = engine.encode([baseline_text])
         emb2 = engine.encode([current_text])
@@ -93,9 +95,9 @@ class DriftBridge:
             "test_results": getattr(result, "test_results", {}),
         }
 
-        if output_format == "table":
+        if emit_console and output_format == "table":
             self._print_table(output)
-        elif output_format == "json":
+        elif emit_console and output_format == "json":
             console.print(json.dumps(output, indent=2, default=str))
 
         return output
@@ -107,6 +109,7 @@ class DriftBridge:
         engine,
         detector,
         output_format: str,
+        emit_console: bool,
     ) -> dict:
         from legaldrift import align_chunks, chunk_by_sections
 
@@ -145,9 +148,9 @@ class DriftBridge:
 
         output = {"chunked": True, "sections": section_results}
 
-        if output_format == "table":
+        if emit_console and output_format == "table":
             self._print_chunked_table(section_results)
-        elif output_format == "json":
+        elif emit_console and output_format == "json":
             console.print(json.dumps(output, indent=2, default=str))
 
         return output

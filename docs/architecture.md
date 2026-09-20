@@ -38,10 +38,10 @@ The RegulatoryRAG class provides semantic retrieval over regulatory documents.
 **Pipeline:**
 1. **Ingestion**: reads `.txt`/`.md` files, chunks with `RecursiveCharacterTextSplitter` (500 chars, 80 overlap).
 2. **Embedding**: `sentence-transformers/all-MiniLM-L6-v2` locally (no API key needed).
-3. **Storage**: ChromaDB persistent vector store; chunk IDs are content hashes, so re-ingestion **upserts instead of duplicating**.
+3. **Storage**: ChromaDB persistent vector store; source-relative IDs and hashes allow changed, renamed, and deleted sources to be synchronized without retaining stale chunks.
 4. **Retrieval**: top-k semantic search returning raw distance plus a normalized relevance score (`1/(1+distance)`).
 
-There is no LLM answer-generation step: the engine returns ranked passages for a human (or the checker) to read.
+There is no LLM answer-generation step: the engine returns ranked passages for a human (or the checker) to read. The local vector store may contain sensitive source text and must be protected.
 
 ### 3. Drift Detection Engine (`engine/drift.py`, extra: `[drift]`)
 
@@ -60,9 +60,11 @@ Orchestrates the engines for `compliance-agent check`:
 3. **Regulatory context** (if `--regulations` given and the RAG extra installed).
 4. **Summary panel**: pass counts over applicable rules, failures by severity, overall score, risk level.
 
+JSON checks also include `stages` and `warnings`, making unavailable optional dependencies explicit instead of silently treating a partial check as complete.
+
 ## Reporting (`engine/reporting.py`)
 
-`write_report` renders a ComplianceReport as JSON, Markdown, or self-contained HTML. Every report carries a provenance block (timestamp, tool version, report schema version, SHA-256 of the policy and rule pack, threshold) and per-finding quoted evidence with character offsets. See [report-schema.md](report-schema.md).
+`write_report` renders a ComplianceReport as JSON, Markdown, or self-contained HTML. Every report carries a provenance block (timestamp, tool version, report schema version, SHA-256 of the policy and rule pack, threshold) and per-finding quoted evidence with character offsets. See [report-schema.md](report-schema.md). Reports are review artifacts, not legal determinations.
 
 ## CLI Architecture (`cli.py`)
 

@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from math import inf, nan
 
 from compliance_agent.engine.reasoner import (
     DDL,
@@ -10,6 +11,7 @@ from compliance_agent.engine.reasoner import (
     Predicate,
     RuleValidationError,
     extract_predicate,
+    parse_scenario,
 )
 
 
@@ -286,6 +288,23 @@ def test_d4_post_keyword_negation_detected():
     assert not result["matched"]
 
 
+def test_d4_negation_is_local_to_each_clause():
+    pred = Predicate(name="sells_data", keywords=["sell data"])
+    result = extract_predicate(pred, "We do not sell data to advertisers, but we sell data to partners.")
+
+    assert result["matched"]
+    assert result["score"] == 1.0
+    assert [snippet["negated"] for snippet in result["snippets"]] == [True, False]
+
+
+def test_d4_semicolon_starts_a_new_negation_scope():
+    pred = Predicate(name="sells_data", keywords=["sell data"])
+    result = extract_predicate(pred, "We do not sell data; however, we may sell data under a separate program.")
+
+    assert result["matched"]
+    assert [snippet["negated"] for snippet in result["snippets"]] == [True, False]
+
+
 def test_d5_applies_when_gates_to_not_applicable():
     rule = ComplianceRule(
         id="AI-1",
@@ -419,6 +438,42 @@ def test_scenario_unmet_obligations_allow_with_obligations():
     assert report.decision == "ALLOW_WITH_OBLIGATIONS"
 
 
+def test_reasoner_rejects_invalid_thresholds():
+    for value in (-0.01, 1.01, nan, inf, -inf):
+        try:
+            ComplianceReasoner(threshold=value)
+        except ValueError:
+            continue
+        raise AssertionError(f"threshold {value!r} should be rejected")
+
+
+def test_rule_validation_rejects_non_finite_weights():
+    reasoner = ComplianceReasoner()
+    for value in (nan, inf, -inf):
+        errors = reasoner.validate_rules_dict(
+            {
+                "rules": [
+                    {
+                        "id": "WEIGHT-001",
+                        "type": "obligation",
+                        "description": "Finite weight required",
+                        "predicates": [{"name": "p", "keywords": ["p"], "weight": value}],
+                    }
+                ]
+            }
+        )
+        assert any("weight" in error for error in errors)
+
+
+def test_parse_scenario_rejects_out_of_range_facts():
+    for value in (-0.01, 1.01, nan, inf, -inf):
+        try:
+            parse_scenario({"facts": {"predicate": value}})
+        except ValueError:
+            continue
+        raise AssertionError(f"fact {value!r} should be rejected")
+
+
 def test_validate_rejects_unless_on_obligation():
     data = {
         "rules": [
@@ -483,5 +538,9 @@ def test_parse_scenario_accepts_list_and_mapping_facts():
     _, facts = parse_scenario({"scenario": {"facts": [{"predicate": "a", "value": 0.7}]}})
     assert facts == {"a": 0.7}
 
-    _, facts = parse_scenario({"facts": {"b": 1.5}})
-    assert facts == {"b": 1.0}  # clamped
+    try:
+        parse_scenario({"facts": {"b": 1.5}})
+    except ValueError as exc:
+        assert "between 0 and 1" in str(exc)
+    else:
+        raise AssertionError("out-of-range facts must be rejected")

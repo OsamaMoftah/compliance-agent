@@ -1,0 +1,113 @@
+version: 1
+cases:
+  - id: consent-present
+    policy: "We obtain explicit consent from users before processing their data."
+    rules:
+      - id: CONSENT-001
+        type: obligation
+        severity: major
+        description: "Consent is required before processing."
+        predicates:
+          - name: explicit_consent
+            keywords: [explicit consent]
+    expected:
+      CONSENT-001: PASS
+    expected_evidence:
+      CONSENT-001: [explicit consent]
+
+  - id: consent-missing
+    policy: "We collect account information to provide the service."
+    rules:
+      - id: CONSENT-001
+        type: obligation
+        severity: major
+        description: "Consent is required before processing."
+        predicates:
+          - name: explicit_consent
+            keywords: [explicit consent]
+    expected:
+      CONSENT-001: FAIL
+
+  - id: sale-negated
+    policy: "We do not sell data to advertisers."
+    rules:
+      - id: SALE-001
+        type: prohibition
+        severity: critical
+        description: "Data must not be sold."
+        predicates:
+          - name: sale
+            keywords: [sell data]
+    expected:
+      SALE-001: PASS
+
+  - id: sale-detected
+    policy: "We sell data to advertising partners."
+    rules:
+      - id: SALE-001
+        type: prohibition
+        severity: critical
+        description: "Data must not be sold."
+        predicates:
+          - name: sale
+            keywords: [sell data]
+    expected:
+      SALE-001: FAIL
+
+  - id: sharing-exception
+    policy: "Data is shared with third parties under a data processing agreement."
+    rules:
+      - id: SHARE-001
+        type: prohibition
+        severity: major
+        description: "Sharing requires a data processing agreement."
+        predicates:
+          - name: third_party_sharing
+            keywords: [shared with third parties]
+        unless:
+          - name: dpa
+            keywords: [data processing agreement]
+    expected:
+      SHARE-001: PASS
+
+  - id: ai-not-applicable
+    policy: "We provide payroll administration and do not operate an AI system."
+    rules:
+      - id: AI-001
+        type: obligation
+        severity: major
+        description: "AI systems require human oversight."
+        applies_when:
+          - name: uses_ai
+            keywords: [AI system]
+        predicates:
+          - name: human_oversight
+            keywords: [human oversight]
+    expected:
+      AI-001: N/A
+
+  - id: ambiguous-sharing
+    policy: "We may share data with selected partners when appropriate."
+    rules:
+      - id: SHARE-AMBIGUOUS-001
+        type: prohibition
+        severity: major
+        description: "Data sharing requires explicit authorization."
+        predicates:
+          - name: sharing
+            keywords: [share data]
+    expected:
+      SHARE-AMBIGUOUS-001: FAIL
+
+  - id: adversarial-mixed-sale
+    policy: "We do not sell data to advertisers, but we sell data to partners."
+    rules:
+      - id: SALE-MIXED-001
+        type: prohibition
+        severity: critical
+        description: "Data must not be sold."
+        predicates:
+          - name: sale
+            keywords: [sell data]
+    expected:
+      SALE-MIXED-001: FAIL

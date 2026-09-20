@@ -13,6 +13,7 @@ import click
 import yaml
 from rich.console import Console
 
+from compliance_agent.benchmark import benchmark_to_markdown, print_benchmark, run_benchmark
 from compliance_agent.engine.checker import ComplianceChecker
 from compliance_agent.engine.reasoner import (
     ComplianceReasoner,
@@ -134,16 +135,37 @@ def check(policy, rules, regulations, baseline, threshold, output_format, verbos
         _fail(f"Policy file not found: {policy}")
 
     if output_format == "json":
-        reasoner = ComplianceReasoner(threshold=threshold)
-        rule_list = _load_rules(reasoner, rules)
-        policy_text = _read_text(policy, "Policy file")
-        report = reasoner.evaluate_policy(policy_text, rule_list)
+        checker = ComplianceChecker()
+        try:
+            result = checker.full_check(
+                policy_path=policy,
+                rules_path=rules,
+                regulations_dir=regulations,
+                baseline_path=baseline,
+                threshold=threshold,
+                verbose=False,
+                emit_console=False,
+            )
+        except (FileNotFoundError, NotADirectoryError, ValueError) as e:
+            _fail(str(e))
+        except yaml.YAMLError as e:
+            _fail(f"Rules file is not valid YAML ({rules}): {e}")
+        except RuleValidationError as e:
+            _fail("Rules validation failed: " + "; ".join(e.errors))
+
+        report = result["report"]
         data = report_to_dict(
             report,
             metadata={"policy": policy, "rules": rules, "threshold": threshold},
             provenance=build_provenance(policy, rules, threshold),
         )
+        data["drift"] = result["drift"]
+        data["rag"] = result["rag"]
+        data["warnings"] = result["warnings"]
+        data["stages"] = result["stages"]
         click.echo(json.dumps(data, indent=2))
+        for warning in result["warnings"]:
+            click.echo(f"Warning: {warning}", err=True)
         sys.exit(EXIT_FINDINGS if report.failed_count else EXIT_OK)
 
     checker = ComplianceChecker()
@@ -165,6 +187,8 @@ def check(policy, rules, regulations, baseline, threshold, output_format, verbos
         for error in e.errors:
             console.print(f"  - {error}")
         sys.exit(EXIT_ERROR)
+    except ValueError as e:
+        _fail(str(e))
 
     sys.exit(EXIT_FINDINGS if result["report"].failed_count else EXIT_OK)
 
@@ -176,7 +200,10 @@ def check(policy, rules, regulations, baseline, threshold, output_format, verbos
 @click.option("--threshold", default=0.5, type=float, help="Decision threshold (default: 0.5)")
 def report(policy, rules, output, threshold):
     """Generate a shareable compliance review report."""
-    reasoner = ComplianceReasoner(threshold=threshold)
+    try:
+        reasoner = ComplianceReasoner(threshold=threshold)
+    except ValueError as e:
+        _fail(str(e))
     rule_list = _load_rules(reasoner, rules)
     policy_text = _read_text(policy, "Policy file")
 
@@ -191,6 +218,27 @@ def report(policy, rules, output, threshold):
     except (ValueError, OSError) as e:
         _fail(str(e))
     console.print(f"[green]Report written:[/green] {output_path}")
+
+
+@main.command()
+@click.option("--dataset", required=True, type=click.Path(exists=True, dir_okay=False), help="Synthetic benchmark YAML dataset")
+@click.option("--output", type=click.Choice(["table", "json", "md"]), default="table", show_default=True)
+def benchmark(dataset, output):
+    """Evaluate a versioned synthetic benchmark dataset.
+
+    Results measure deterministic rule behavior only and do not validate legal interpretation.
+    """
+    try:
+        result = run_benchmark(dataset)
+    except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+        _fail(str(e))
+
+    if output == "json":
+        click.echo(json.dumps(result, indent=2))
+    elif output == "md":
+        click.echo(benchmark_to_markdown(result), nl=False)
+    else:
+        print_benchmark(result)
 
 
 @main.command("validate-rules")
@@ -252,7 +300,10 @@ def reason(scenario_path, rules, threshold, output_format, verbose):
         _fail(f"Invalid scenario file ({scenario_path}): {e}")
         return
 
-    reasoner = ComplianceReasoner(threshold=threshold)
+    try:
+        reasoner = ComplianceReasoner(threshold=threshold)
+    except ValueError as e:
+        _fail(str(e))
     rule_list = _load_rules(reasoner, rules)
 
     scenario_report = reasoner.evaluate_scenario(facts, rule_list)
