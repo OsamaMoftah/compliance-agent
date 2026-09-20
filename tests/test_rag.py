@@ -58,6 +58,13 @@ def test_query_without_index():
         rag.query("test")
 
 
+def test_persist_dir_is_normalized_once(tmp_path):
+    configured = tmp_path / "nested" / ".." / "index"
+    rag = RegulatoryRAG(persist_dir=str(configured))
+
+    assert rag.persist_dir == os.path.realpath(os.path.expanduser(str(configured)))
+
+
 def test_ingest_empty_directory():
     with tempfile.TemporaryDirectory() as tmpdir:
         rag = RegulatoryRAG(persist_dir=os.path.join(tmpdir, ".chroma"))

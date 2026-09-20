@@ -20,11 +20,9 @@ Please do not disclose sensitive policy text or exploit details in a public issu
 
 ## CodeQL review notes
 
-The CodeQL `py/path-injection` query is excluded for this repository because
-`RegulatoryRAG.ingest_directory` intentionally accepts a local corpus path from
-the CLI. That boundary canonicalizes the path, verifies that it exists and is a
-directory, and only reads supported files below it. Index deletion is a separate
-operation with its own trusted-root, ownership-marker, and symlink checks. The
-CodeQL configuration keeps the remaining default security queries enabled; any
-new filesystem write or deletion path must still receive an explicit security
-review and tests.
+The repository keeps CodeQL's `py/path-injection` query enabled. A small local
+CodeQL model pack marks only `RegulatoryRAG._validated_source_path` as a
+path-injection barrier because it canonicalizes the explicitly selected corpus,
+requires that it exists as a directory, and returns it solely for read-only
+ingestion. Do not reuse that helper for writes or deletion; index deletion is a
+separate operation with trusted-root, ownership-marker, and symlink checks.

@@ -49,7 +49,7 @@ class RegulatoryRAG:
     """
 
     def __init__(self, persist_dir: str = DEFAULT_PERSIST_DIR, model_name: str = DEFAULT_MODEL):
-        self.persist_dir = persist_dir
+        self.persist_dir = os.path.realpath(os.path.expanduser(persist_dir))
         self.model_name = model_name
         self._embeddings = None
         self._vectorstore = None
@@ -74,13 +74,7 @@ class RegulatoryRAG:
 
         Returns the number of chunks ingested.
         """
-        canonical_source = os.path.realpath(os.path.expanduser(source_dir))
-        if not os.path.exists(canonical_source):
-            raise FileNotFoundError(f"Source directory not found: {source_dir}")
-        if not os.path.isdir(canonical_source):
-            raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
-        source_path = Path(canonical_source)
-
+        source_path = self._validated_source_path(source_dir)
         reset_target = self._validate_reset_target(source_path) if reset else None
         if reset_target is not None and reset_target.exists():
             shutil.rmtree(reset_target)
@@ -170,13 +164,23 @@ class RegulatoryRAG:
         return len(all_docs)
 
     @staticmethod
+    def _validated_source_path(source_dir: str) -> Path:
+        """Return a canonical existing directory selected for read-only ingestion."""
+        canonical_source = os.path.realpath(os.path.expanduser(source_dir))
+        if not os.path.exists(canonical_source):
+            raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        if not os.path.isdir(canonical_source):
+            raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
+        return Path(canonical_source)
+
+    @staticmethod
     def _source_id(filepath: Path, source_path: Path) -> str:
         """Return a stable, user-safe source identity relative to the corpus."""
         return filepath.relative_to(source_path).as_posix()
 
     def _validate_reset_target(self, source_path: Path) -> Path:
         """Reject destructive reset targets that are not dedicated data directories."""
-        configured_path = Path(self.persist_dir).expanduser()
+        configured_path = Path(self.persist_dir)
         if configured_path.is_symlink():
             raise ValueError("reset requires a safe persistence directory, not a symbolic link")
         persist_path = configured_path.resolve()
@@ -196,7 +200,7 @@ class RegulatoryRAG:
         return persist_path
 
     def _write_ownership_marker(self) -> None:
-        persist_path = Path(self.persist_dir).expanduser().resolve()
+        persist_path = Path(self.persist_dir)
         persist_path.mkdir(parents=True, exist_ok=True)
         (persist_path / INDEX_MARKER).write_text(INDEX_MARKER_CONTENT, encoding="utf-8")
 
