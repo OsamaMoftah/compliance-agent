@@ -5,13 +5,18 @@ import os
 import re
 import tempfile
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 import streamlit as st
 import yaml
 
-from compliance_agent.dashboard.state import clear_search_state, filter_search_results, read_search_state, write_search_state
+from compliance_agent.dashboard.state import (
+    clear_search_state,
+    filter_search_results,
+    read_search_state,
+    resolve_sample_dir,
+    write_search_state,
+)
 from compliance_agent.engine.reasoner import (
     STATUS_FAIL,
     STATUS_NA,
@@ -28,7 +33,7 @@ st.set_page_config(page_title="Compliance Agent", page_icon="\U0001f6e1️", lay
 st.title("\U0001f6e1️ Compliance Agent")
 st.markdown("Regulatory intelligence, drift detection, and rule reasoning — in one dashboard.")
 
-SAMPLE_DIR = Path("sample_data")
+SAMPLE_DIR = resolve_sample_dir()
 HAS_SAMPLES = SAMPLE_DIR.exists()
 
 STATUS_ICONS = {STATUS_PASS: "✅", STATUS_WARN: "⚠️", STATUS_FAIL: "❌", STATUS_NA: "➖"}

@@ -12,6 +12,8 @@ console = Console()
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_PERSIST_DIR = ".chroma"
+INDEX_MARKER = ".compliance-agent-index"
+INDEX_MARKER_CONTENT = "compliance-agent-index-v1\n"
 
 
 def _embeddings_class():
@@ -78,10 +80,9 @@ class RegulatoryRAG:
         if not source_path.is_dir():
             raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
 
-        if reset:
-            self._validate_reset_target(source_path)
-        if reset and os.path.exists(self.persist_dir):
-            shutil.rmtree(self.persist_dir)
+        reset_target = self._validate_reset_target(source_path) if reset else None
+        if reset_target is not None and reset_target.exists():
+            shutil.rmtree(reset_target)
             self._vectorstore = None
 
         text_files = sorted(source_path.rglob("*.txt")) + sorted(source_path.rglob("*.md"))
@@ -150,6 +151,7 @@ class RegulatoryRAG:
                 embedding_function=self.embeddings,
             )
             self._vectorstore = store
+            self._write_ownership_marker()
         existing_ids = {record_id for record_id, _ in self._stored_records(store)} if store is not None else set()
         additions = [(document, record_id) for document, record_id in zip(all_docs, ids) if record_id not in existing_ids]
         added_ids = [record_id for _, record_id in additions]
@@ -171,15 +173,31 @@ class RegulatoryRAG:
         """Return a stable, user-safe source identity relative to the corpus."""
         return filepath.relative_to(source_path).as_posix()
 
-    def _validate_reset_target(self, source_path: Path) -> None:
+    def _validate_reset_target(self, source_path: Path) -> Path:
         """Reject destructive reset targets that are not dedicated data directories."""
-        persist_path = Path(self.persist_dir).expanduser().resolve()
+        configured_path = Path(self.persist_dir).expanduser()
+        if configured_path.is_symlink():
+            raise ValueError("reset requires a safe persistence directory, not a symbolic link")
+        persist_path = configured_path.resolve()
         source_resolved = source_path.resolve()
         forbidden = {Path("/").resolve(), Path.home().resolve(), Path.cwd().resolve(), source_resolved}
         if persist_path in forbidden or persist_path in source_resolved.parents or persist_path.name in {"", ".", ".."}:
             raise ValueError("reset requires a safe persistence directory distinct from the source directory")
+        trusted_roots = (Path.cwd().resolve(), source_resolved)
+        if not any(root in persist_path.parents for root in trusted_roots):
+            raise ValueError("reset requires the persistence directory to be inside a trusted data root")
         if persist_path.exists() and not persist_path.is_dir():
             raise ValueError("reset requires a safe persistence directory, not a file")
+        if persist_path.exists() and any(persist_path.iterdir()):
+            marker = persist_path / INDEX_MARKER
+            if not marker.is_file() or marker.read_text(encoding="utf-8") != INDEX_MARKER_CONTENT:
+                raise ValueError("reset requires a valid compliance-agent ownership marker")
+        return persist_path
+
+    def _write_ownership_marker(self) -> None:
+        persist_path = Path(self.persist_dir).expanduser().resolve()
+        persist_path.mkdir(parents=True, exist_ok=True)
+        (persist_path / INDEX_MARKER).write_text(INDEX_MARKER_CONTENT, encoding="utf-8")
 
     @staticmethod
     def _stored_records(store) -> list[tuple[str, dict]]:

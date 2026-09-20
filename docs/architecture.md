@@ -17,7 +17,7 @@ The ComplianceReasoner evaluates schema-v2 rules against policy text or scenario
 
 **Evaluation pipeline (text mode):**
 1. The policy is split into sentence spans once per document.
-2. Each predicate's terms are matched with word boundaries; negation is detected **within the matched sentence only**, both before the keyword ("do not", "never", "without", …) and after it ("… is prohibited").
+2. Each predicate's terms are matched with word boundaries; negation is detected within the local sentence clause, both before the keyword ("do not", "never", "without", …) and after it ("… is prohibited"). Clause boundaries include punctuation and contrast conjunctions so a negated occurrence does not suppress a later positive occurrence.
 3. Predicate scores are aggregated per rule as a weighted mean (`Σ(score·w)/Σ(w)`) — the same aggregation used in facts mode.
 4. Deontic semantics: obligations/permissions score the evidence directly; prohibitions compute `violation = trigger AND NOT exception` with the soft-logic ops, then `strength = NOT violation`.
 5. Rules whose `applies_when` gate has no non-negated match report status **N/A** and are excluded from scoring and risk.
@@ -40,6 +40,8 @@ The RegulatoryRAG class provides semantic retrieval over regulatory documents.
 2. **Embedding**: `sentence-transformers/all-MiniLM-L6-v2` locally (no API key needed).
 3. **Storage**: ChromaDB persistent vector store; source-relative IDs and hashes allow changed, renamed, and deleted sources to be synchronized without retaining stale chunks.
 4. **Retrieval**: top-k semantic search returning raw distance plus a normalized relevance score (`1/(1+distance)`).
+
+Destructive reset is fail-safe: the persistence path must be inside the current workspace or selected corpus, symbolic links are rejected, and a non-empty directory must contain the ownership marker written when Compliance Agent creates an index.
 
 There is no LLM answer-generation step: the engine returns ranked passages for a human (or the checker) to read. The local vector store may contain sensitive source text and must be protected.
 

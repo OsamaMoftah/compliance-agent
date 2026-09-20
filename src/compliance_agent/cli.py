@@ -111,7 +111,9 @@ def monitor(source, query, reset):
     else:
         try:
             rag.ingest_directory(source, reset=reset)
-        except FileNotFoundError as e:
+        except ImportError:
+            _fail("RAG dependencies are not installed. Install with: pip install 'compliance-agent[rag]'")
+        except (OSError, UnicodeError, ValueError) as e:
             _fail(str(e))
         console.print(f"\n[green]Ready. Try:[/green] compliance-agent monitor --source {source} --query \"Your question\"")
         if sources := rag.list_sources():

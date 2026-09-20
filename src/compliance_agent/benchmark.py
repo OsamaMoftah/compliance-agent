@@ -29,21 +29,46 @@ def load_dataset(path: str) -> dict[str, Any]:
     if not isinstance(cases, list) or not cases:
         raise ValueError("Benchmark dataset must contain a non-empty cases list.")
 
+    seen_case_ids: set[str] = set()
     for index, case in enumerate(cases, 1):
         prefix = f"cases[{index}]"
         if not isinstance(case, dict):
             raise ValueError(f"{prefix} must be a mapping.")
         if not isinstance(case.get("id"), str) or not case["id"].strip():
             raise ValueError(f"{prefix}.id must be a non-empty string.")
+        if case["id"] in seen_case_ids:
+            raise ValueError(f"{prefix}.id must be unique; duplicate: {case['id']}.")
+        seen_case_ids.add(case["id"])
         if not isinstance(case.get("policy"), str):
             raise ValueError(f"{prefix}.policy must be a string.")
         if not isinstance(case.get("rules"), list) or not case["rules"]:
             raise ValueError(f"{prefix}.rules must be a non-empty list.")
         if not isinstance(case.get("expected"), dict) or not case["expected"]:
             raise ValueError(f"{prefix}.expected must be a non-empty mapping.")
+        rule_ids = [rule.get("id") for rule in case["rules"] if isinstance(rule, dict)]
+        if (
+            len(rule_ids) != len(case["rules"])
+            or any(not isinstance(rule_id, str) or not rule_id.strip() for rule_id in rule_ids)
+            or len(set(rule_ids)) != len(rule_ids)
+        ):
+            raise ValueError(f"{prefix}.rules must have unique non-empty IDs.")
         for rule_id, status in case["expected"].items():
             if not isinstance(rule_id, str) or status not in _VALID_STATUSES:
                 raise ValueError(f"{prefix}.expected must map rule IDs to valid statuses.")
+        if set(case["expected"]) != set(rule_ids):
+            raise ValueError(f"{prefix}.expected keys must exactly match rule IDs.")
+        expected_evidence = case.get("expected_evidence", {})
+        if not isinstance(expected_evidence, dict):
+            raise ValueError(f"{prefix}.expected_evidence must be a mapping.")
+        for rule_id, terms in expected_evidence.items():
+            if rule_id not in set(rule_ids):
+                raise ValueError(f"{prefix}.expected_evidence contains unknown rule ID: {rule_id}.")
+            if (
+                not isinstance(terms, list)
+                or not terms
+                or any(not isinstance(term, str) or not term.strip() for term in terms)
+            ):
+                raise ValueError(f"{prefix}.expected_evidence values must be non-empty lists of strings.")
 
     return data
 

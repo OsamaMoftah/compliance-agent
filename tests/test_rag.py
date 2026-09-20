@@ -145,6 +145,44 @@ def test_reset_rejects_persistence_ancestor_of_source(tmp_path):
         rag.ingest_directory(str(source), reset=True)
 
 
+def test_reset_rejects_persistence_outside_trusted_roots(tmp_path):
+    source = tmp_path / "regulations"
+    source.mkdir()
+    (source / "policy.txt").write_text("Policy text.")
+    persist = tmp_path.parent / f"{tmp_path.name}-untrusted" / ".chroma"
+    rag = RegulatoryRAG(persist_dir=str(persist))
+
+    with pytest.raises(ValueError, match="trusted data root"):
+        rag.ingest_directory(str(source), reset=True)
+
+
+def test_reset_rejects_nonempty_unmarked_persistence_directory(tmp_path):
+    source = tmp_path / "regulations"
+    source.mkdir()
+    (source / "policy.txt").write_text("Policy text.")
+    persist = source / ".chroma"
+    persist.mkdir()
+    (persist / "unrelated.txt").write_text("Do not delete me.")
+    rag = RegulatoryRAG(persist_dir=str(persist))
+
+    with pytest.raises(ValueError, match="ownership marker"):
+        rag.ingest_directory(str(source), reset=True)
+
+    assert (persist / "unrelated.txt").read_text() == "Do not delete me."
+
+
+def test_reset_accepts_application_owned_nonempty_directory(tmp_path):
+    source = tmp_path / "regulations"
+    source.mkdir()
+    (source / "policy.txt").write_text("Policy text.")
+    persist = source / ".chroma"
+    rag = RegulatoryRAG(persist_dir=str(persist))
+    rag.ingest_directory(str(source), reset=True)
+
+    assert (persist / ".compliance-agent-index").is_file()
+    assert rag.ingest_directory(str(source), reset=True) > 0
+
+
 def test_failed_reingestion_preserves_previous_index(sample_regulations, monkeypatch):
     rag = RegulatoryRAG(persist_dir=os.path.join(sample_regulations, ".chroma"))
     rag.ingest_directory(sample_regulations, reset=True)

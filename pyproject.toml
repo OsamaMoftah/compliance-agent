@@ -69,6 +69,11 @@ compliance-agent = "compliance_agent.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.data-files]
+"share/compliance-agent/sample_data/policies" = ["sample_data/policies/*.txt"]
+"share/compliance-agent/sample_data/regulations" = ["sample_data/regulations/*.txt"]
+"share/compliance-agent/sample_data/rules" = ["sample_data/rules/*.yaml"]
+
 [tool.ruff]
 line-length = 130
 target-version = "py310"

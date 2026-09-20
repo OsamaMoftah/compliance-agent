@@ -273,3 +273,20 @@ def test_benchmark_json_output(runner):
     data = json.loads(result.output)
     assert data["cases"] == 8
     assert data["metrics"]["f1"] == 1.0
+
+
+def test_monitor_unsafe_reset_is_reported_as_input_error(runner, tmp_path, monkeypatch):
+    from compliance_agent.engine.rag import RegulatoryRAG
+
+    source = tmp_path / "regulations"
+    source.mkdir()
+
+    def reject_reset(*args, **kwargs):
+        raise ValueError("reset requires a trusted data root")
+
+    monkeypatch.setattr(RegulatoryRAG, "ingest_directory", reject_reset)
+
+    result = runner.invoke(main, ["monitor", "--source", str(source), "--reset"])
+
+    assert result.exit_code == 2
+    assert "trusted data root" in result.output

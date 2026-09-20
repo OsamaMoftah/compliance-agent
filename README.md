@@ -64,6 +64,8 @@ compliance-agent monitor --source ./sample_data/regulations/
 compliance-agent monitor --source ./sample_data/regulations/ --query "human oversight"
 ```
 
+Use `--reset` only for a dedicated Compliance Agent index. A non-empty index is deleted only when it is inside the current workspace or selected source directory and contains the ownership marker created by Compliance Agent.
+
 ### 5. Detect drift between policy versions (requires `[drift]`)
 
 ```bash
@@ -228,6 +230,7 @@ Compliance Agent is designed to interoperate with:
 - **Requires well-formed rules.** Start with the bundled examples and run `validate-rules`.
 - **No formal legal validation.** Rule packs and citations must be reviewed and maintained by qualified subject-matter experts.
 - **Local sensitive data.** RAG stores document chunks in the configured local Chroma directory; protect that directory and generated reports.
+- **Fail-safe index reset.** Reset refuses symlinks, broad/out-of-scope paths, and non-empty directories without a valid Compliance Agent ownership marker.
 - **Optional-stage status.** JSON checks expose requested, completed, and unavailable drift/RAG stages so automation can detect partial results.
 
 ---

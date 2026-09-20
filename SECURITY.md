@@ -13,6 +13,7 @@ Please do not disclose sensitive policy text or exploit details in a public issu
 ## Operational guidance
 
 - Keep `.chroma/`, uploaded documents, generated reports, and model caches out of public directories.
+- Do not copy `.compliance-agent-index` into unrelated directories. It is an ownership marker used to authorize deletion during `monitor --reset`.
 - Do not expose the Streamlit dashboard to an untrusted network without adding authentication and transport protection.
 - Treat retrieved passages as untrusted input and review citations before relying on them.
 - Run the CLI with explicit output paths and least-privilege filesystem permissions.
