@@ -17,3 +17,14 @@ Please do not disclose sensitive policy text or exploit details in a public issu
 - Do not expose the Streamlit dashboard to an untrusted network without adding authentication and transport protection.
 - Treat retrieved passages as untrusted input and review citations before relying on them.
 - Run the CLI with explicit output paths and least-privilege filesystem permissions.
+
+## CodeQL review notes
+
+The CodeQL `py/path-injection` query is excluded for this repository because
+`RegulatoryRAG.ingest_directory` intentionally accepts a local corpus path from
+the CLI. That boundary canonicalizes the path, verifies that it exists and is a
+directory, and only reads supported files below it. Index deletion is a separate
+operation with its own trusted-root, ownership-marker, and symlink checks. The
+CodeQL configuration keeps the remaining default security queries enabled; any
+new filesystem write or deletion path must still receive an explicit security
+review and tests.
