@@ -74,8 +74,9 @@ class RegulatoryRAG:
 
         Returns the number of chunks ingested.
         """
-        source_path = Path(source_dir)
-        if not source_path.exists():
+        try:
+            source_path = Path(source_dir).expanduser().resolve(strict=True)
+        except FileNotFoundError:
             raise FileNotFoundError(f"Source directory not found: {source_dir}")
         if not source_path.is_dir():
             raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
@@ -179,7 +180,7 @@ class RegulatoryRAG:
         if configured_path.is_symlink():
             raise ValueError("reset requires a safe persistence directory, not a symbolic link")
         persist_path = configured_path.resolve()
-        source_resolved = source_path.resolve()
+        source_resolved = source_path
         forbidden = {Path("/").resolve(), Path.home().resolve(), Path.cwd().resolve(), source_resolved}
         if persist_path in forbidden or persist_path in source_resolved.parents or persist_path.name in {"", ".", ".."}:
             raise ValueError("reset requires a safe persistence directory distinct from the source directory")
