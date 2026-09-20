@@ -74,14 +74,12 @@ class RegulatoryRAG:
 
         Returns the number of chunks ingested.
         """
-        source_path = Path(os.path.realpath(os.path.expanduser(source_dir)))
-        if not source_path.exists():
+        canonical_source = os.path.realpath(os.path.expanduser(source_dir))
+        if not os.path.exists(canonical_source):
             raise FileNotFoundError(f"Source directory not found: {source_dir}")
-        # The CLI intentionally accepts a local corpus path; realpath above
-        # canonicalizes it before this filesystem check and before any read.
-        # lgtm [py/path-injection]
-        if not source_path.is_dir():
+        if not os.path.isdir(canonical_source):
             raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
+        source_path = Path(canonical_source)
 
         reset_target = self._validate_reset_target(source_path) if reset else None
         if reset_target is not None and reset_target.exists():
