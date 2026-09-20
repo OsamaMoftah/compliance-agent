@@ -77,7 +77,9 @@ class RegulatoryRAG:
         source_path = Path(os.path.realpath(os.path.expanduser(source_dir)))
         if not source_path.exists():
             raise FileNotFoundError(f"Source directory not found: {source_dir}")
-        if not source_path.is_dir():
+        # The CLI intentionally accepts a local corpus path; realpath above
+        # canonicalizes it before this filesystem check and before any read.
+        if not source_path.is_dir():  # lgtm [py/path-injection]
             raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
 
         reset_target = self._validate_reset_target(source_path) if reset else None
