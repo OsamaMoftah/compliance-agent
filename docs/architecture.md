@@ -17,7 +17,7 @@ The ComplianceReasoner evaluates schema-v2 rules against policy text or scenario
 
 **Evaluation pipeline (text mode):**
 1. The policy is split into sentence spans once per document.
-2. Each predicate's terms are matched with word boundaries; negation is detected **within the matched sentence only**, both before the keyword ("do not", "never", "without", …) and after it ("… is prohibited").
+2. Each predicate's terms are matched with word boundaries; negation is detected within the local sentence clause, both before the keyword ("do not", "never", "without", …) and after it ("… is prohibited"). Clause boundaries include punctuation and contrast conjunctions so a negated occurrence does not suppress a later positive occurrence.
 3. Predicate scores are aggregated per rule as a weighted mean (`Σ(score·w)/Σ(w)`) — the same aggregation used in facts mode.
 4. Deontic semantics: obligations/permissions score the evidence directly; prohibitions compute `violation = trigger AND NOT exception` with the soft-logic ops, then `strength = NOT violation`.
 5. Rules whose `applies_when` gate has no non-negated match report status **N/A** and are excluded from scoring and risk.
@@ -38,10 +38,12 @@ The RegulatoryRAG class provides semantic retrieval over regulatory documents.
 **Pipeline:**
 1. **Ingestion**: reads `.txt`/`.md` files, chunks with `RecursiveCharacterTextSplitter` (500 chars, 80 overlap).
 2. **Embedding**: `sentence-transformers/all-MiniLM-L6-v2` locally (no API key needed).
-3. **Storage**: ChromaDB persistent vector store; chunk IDs are content hashes, so re-ingestion **upserts instead of duplicating**.
+3. **Storage**: ChromaDB persistent vector store; source-relative IDs and hashes allow changed, renamed, and deleted sources to be synchronized without retaining stale chunks.
 4. **Retrieval**: top-k semantic search returning raw distance plus a normalized relevance score (`1/(1+distance)`).
 
-There is no LLM answer-generation step: the engine returns ranked passages for a human (or the checker) to read.
+Destructive reset is fail-safe: the persistence path must be inside the current workspace or selected corpus, symbolic links are rejected, and a non-empty directory must contain the ownership marker written when Compliance Agent creates an index.
+
+There is no LLM answer-generation step: the engine returns ranked passages for a human (or the checker) to read. The local vector store may contain sensitive source text and must be protected.
 
 ### 3. Drift Detection Engine (`engine/drift.py`, extra: `[drift]`)
 
@@ -60,9 +62,11 @@ Orchestrates the engines for `compliance-agent check`:
 3. **Regulatory context** (if `--regulations` given and the RAG extra installed).
 4. **Summary panel**: pass counts over applicable rules, failures by severity, overall score, risk level.
 
+JSON checks also include `stages` and `warnings`, making unavailable optional dependencies explicit instead of silently treating a partial check as complete.
+
 ## Reporting (`engine/reporting.py`)
 
-`write_report` renders a ComplianceReport as JSON, Markdown, or self-contained HTML. Every report carries a provenance block (timestamp, tool version, report schema version, SHA-256 of the policy and rule pack, threshold) and per-finding quoted evidence with character offsets. See [report-schema.md](report-schema.md).
+`write_report` renders a ComplianceReport as JSON, Markdown, or self-contained HTML. Every report carries a provenance block (timestamp, tool version, report schema version, SHA-256 of the policy and rule pack, threshold) and per-finding quoted evidence with character offsets. See [report-schema.md](report-schema.md). Reports are review artifacts, not legal determinations.
 
 ## CLI Architecture (`cli.py`)
 

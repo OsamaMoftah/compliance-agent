@@ -66,6 +66,22 @@
 }
 ```
 
+`check --format json` additionally emits:
+
+```json
+{
+  "drift": null,
+  "rag": null,
+  "warnings": [],
+  "stages": {
+    "drift": {"requested": false, "status": "not_requested", "result": null},
+    "rag": {"requested": false, "status": "not_requested", "result": null}
+  }
+}
+```
+
+When an optional dependency is unavailable, the corresponding stage has status `unavailable` and a human-readable warning. Automation should inspect `stages` before treating a check as complete.
+
 ## Compatibility notes
 
 - Keys present in schema v1 (`metadata`, `summary.overall_score/risk_level/passed/failed/total/text`, `results[].rule_id/rule_type/description/passed/strength/explanation/predicates/matched_predicates/recommended_action`) are unchanged; v2 adds fields without removing any.

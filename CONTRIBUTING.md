@@ -71,7 +71,7 @@ rules:
     predicates:
       - name: "predicate_name"
         keywords: ["exact phrase to search for", "an alternative phrasing"]
-        weight: 1.0           # 0.0 to 1.0
+        weight: 1.0           # greater than 0.0 and at most 1.0
 ```
 
 Always run `compliance-agent validate-rules -r your_rules.yaml` before opening a PR that adds

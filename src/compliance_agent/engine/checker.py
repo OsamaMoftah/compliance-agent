@@ -46,6 +46,7 @@ class ComplianceChecker:
         baseline_path: Optional[str] = None,
         threshold: float = 0.5,
         verbose: bool = False,
+        emit_console: bool = True,
     ) -> dict:
         """Run a complete compliance check on a policy document.
 
@@ -66,60 +67,89 @@ class ComplianceChecker:
         policy_text = policy_file.read_text(encoding="utf-8")
         policy_name = policy_file.name
 
-        console.print(Panel(f"[bold]Compliance Check: {policy_name}[/bold]", style="blue"))
-        console.print()
+        if emit_console:
+            console.print(Panel(f"[bold]Compliance Check: {policy_name}[/bold]", style="blue"))
+            console.print()
 
         # 1. Load rules
         reasoner = ComplianceReasoner(threshold=threshold)
         rules = reasoner.load_rules(rules_path)
-        console.print(f"[dim]Loaded {len(rules)} rules from {rules_path}[/dim]")
+        warnings: list[str] = []
+        if emit_console:
+            console.print(f"[dim]Loaded {len(rules)} rules from {rules_path}[/dim]")
 
         # 2. Rule reasoning
-        console.print("\n[bold]Step 1: Rule Evaluation[/bold]")
+        if emit_console:
+            console.print("\n[bold]Step 1: Rule Evaluation[/bold]")
         report = reasoner.evaluate_policy(policy_text, rules)
-        print_report(report, verbose=verbose)
+        if emit_console:
+            print_report(report, verbose=verbose)
 
         # 3. Drift detection (if baseline provided)
         drift_result = None
+        drift_stage = {"requested": bool(baseline_path), "status": "not_requested", "result": None}
         if baseline_path:
-            console.print("\n[bold]Step 2: Drift Detection[/bold]")
+            if emit_console:
+                console.print("\n[bold]Step 2: Drift Detection[/bold]")
             try:
-                drift_result = self.drift.detect(baseline_path, policy_path, chunked=True, output_format="table")
+                drift_result = self.drift.detect(
+                    baseline_path,
+                    policy_path,
+                    chunked=True,
+                    output_format="table" if emit_console else "json",
+                    emit_console=emit_console,
+                )
+                drift_stage.update(status="completed", result=drift_result)
             except RuntimeError as e:
-                console.print(f"[yellow]Drift detection skipped: {e}[/yellow]")
+                drift_stage.update(status="unavailable", error=str(e))
+                warnings.append(f"Drift detection unavailable: {e}")
+                if emit_console:
+                    console.print(f"[yellow]Drift detection unavailable: {e}[/yellow]")
 
         # 4. Regulatory context (if regulations provided)
         rag_results = None
-        if regulations_dir and Path(regulations_dir).exists():
-            console.print("\n[bold]Step 3: Regulatory Context[/bold]")
+        rag_stage = {"requested": bool(regulations_dir), "status": "not_requested", "result": None}
+        if regulations_dir:
+            if not Path(regulations_dir).is_dir():
+                raise FileNotFoundError(f"Regulations directory not found: {regulations_dir}")
+            if emit_console:
+                console.print("\n[bold]Step 3: Regulatory Context[/bold]")
             try:
-                self.rag.ingest_directory(regulations_dir)
+                self.rag.ingest_directory(regulations_dir, emit_console=emit_console)
                 query = f"Requirements for {policy_name.replace('.txt', '').replace('_', ' ')}"
                 rag_results = self.rag.query(query, k=3)
-                self.rag.print_results(rag_results)
-            except Exception as e:
-                console.print(f"[yellow]RAG context skipped: {e}[/yellow]")
+                rag_stage.update(status="completed", result=rag_results)
+                if emit_console:
+                    self.rag.print_results(rag_results)
+            except (ImportError, RuntimeError, OSError, ValueError) as e:
+                rag_stage.update(status="unavailable", error=str(e))
+                warnings.append(f"Regulatory context unavailable: {e}")
+                if emit_console:
+                    console.print(f"[yellow]Regulatory context unavailable: {e}[/yellow]")
 
         # 5. Summary
         breakdown = report.severity_breakdown()
         breakdown_text = ", ".join(f"{count} {sev}" for sev, count in breakdown.items() if count) or "none"
-        console.print()
-        console.print(Panel(
-            f"Policy: {policy_name}\n"
-            f"Rules passed: {report.passed_count}/{report.applicable_count} applicable"
-            f" ({report.na_count} not applicable, {report.warn_count} marginal)\n"
-            f"Failures by severity: {breakdown_text}\n"
-            f"Overall score: {report.overall_score:.2f}\n"
-            f"Risk level: {report.risk_level}",
-            title="Check Summary",
-            style=_RISK_STYLES.get(report.risk_level, "bold yellow"),
-        ))
+        if emit_console:
+            console.print()
+            console.print(Panel(
+                f"Policy: {policy_name}\n"
+                f"Rules passed: {report.passed_count}/{report.applicable_count} applicable"
+                f" ({report.na_count} not applicable, {report.warn_count} marginal)\n"
+                f"Failures by severity: {breakdown_text}\n"
+                f"Overall score: {report.overall_score:.2f}\n"
+                f"Risk level: {report.risk_level}",
+                title="Check Summary",
+                style=_RISK_STYLES.get(report.risk_level, "bold yellow"),
+            ))
 
         return {
             "policy": policy_name,
             "report": report,
             "drift": drift_result,
             "rag": rag_results,
+            "warnings": warnings,
+            "stages": {"drift": drift_stage, "rag": rag_stage},
         }
 
 

@@ -105,6 +105,34 @@ def test_check_json_format(runner, workspace):
     assert data["provenance"]["policy_sha256"]
 
 
+def test_check_json_format_reports_requested_optional_stages(runner, workspace):
+    baseline = workspace / "baseline.txt"
+    baseline.write_text("An older policy version.", encoding="utf-8")
+    regulations = workspace / "regulations"
+    regulations.mkdir()
+    (regulations / "gdpr.txt").write_text("Consent must be freely given.", encoding="utf-8")
+
+    result = runner.invoke(
+        main,
+        [
+            "check",
+            "-p", str(workspace / "policy.txt"),
+            "-r", str(workspace / "rules.yaml"),
+            "--baseline", str(baseline),
+            "--regulations", str(regulations),
+            "--format", "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["stages"]["drift"]["requested"] is True
+    assert data["stages"]["rag"]["requested"] is True
+    assert "warnings" in data
+    if data["warnings"]:
+        assert "Warning:" in result.stderr
+
+
 def test_validate_rules_ok(runner, workspace):
     result = runner.invoke(main, ["validate-rules", "-r", str(workspace / "rules.yaml")])
     assert result.exit_code == 0
@@ -149,6 +177,21 @@ def test_reason_malformed_scenario_exit_two(runner, workspace):
     )
     assert result.exit_code == 2
     assert "Invalid scenario" in result.output
+
+
+def test_reason_invalid_threshold_exit_two(runner, workspace):
+    result = runner.invoke(
+        main,
+        [
+            "reason",
+            "-s", str(workspace / "scenario.yaml"),
+            "-r", str(workspace / "rules.yaml"),
+            "--threshold", "2",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "threshold" in result.output.lower()
 
 
 def test_reason_json_format(runner, workspace):
@@ -213,3 +256,37 @@ def test_check_sample_data_end_to_end(runner):
         ],
     )
     assert result.exit_code == 0, result.output
+
+
+def test_benchmark_json_output(runner):
+    root = Path(__file__).parent.parent
+    result = runner.invoke(
+        main,
+        [
+            "benchmark",
+            "--dataset", str(root / "benchmarks" / "synthetic_cases.yaml"),
+            "--output", "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["cases"] == 8
+    assert data["metrics"]["f1"] == 1.0
+
+
+def test_monitor_unsafe_reset_is_reported_as_input_error(runner, tmp_path, monkeypatch):
+    from compliance_agent.engine.rag import RegulatoryRAG
+
+    source = tmp_path / "regulations"
+    source.mkdir()
+
+    def reject_reset(*args, **kwargs):
+        raise ValueError("reset requires a trusted data root")
+
+    monkeypatch.setattr(RegulatoryRAG, "ingest_directory", reject_reset)
+
+    result = runner.invoke(main, ["monitor", "--source", str(source), "--reset"])
+
+    assert result.exit_code == 2
+    assert "trusted data root" in result.output

@@ -64,6 +64,8 @@ compliance-agent monitor --source ./sample_data/regulations/
 compliance-agent monitor --source ./sample_data/regulations/ --query "human oversight"
 ```
 
+Use `--reset` only for a dedicated Compliance Agent index. A non-empty index is deleted only when it is inside the current workspace or selected source directory and contains the ownership marker created by Compliance Agent.
+
 ### 5. Detect drift between policy versions (requires `[drift]`)
 
 ```bash
@@ -154,6 +156,14 @@ compliance-agent monitor --source <dir> [--query "question?"] [--reset]
 compliance-agent dashboard [--port 8501]
 ```
 
+### `compliance-agent benchmark`
+
+```bash
+compliance-agent benchmark --dataset benchmarks/synthetic_cases.yaml --output table|json|md
+```
+
+Benchmarks are synthetic regression measurements for the deterministic rule engine. They do not validate legal interpretation.
+
 ---
 
 ## Rules Format (YAML, schema v2)
@@ -184,7 +194,7 @@ Semantics:
 - `permission`: enabling evidence should be present.
 - `prohibition`: forbidden evidence should be absent — **unless** an `unless` exception is evidenced (`violation = trigger AND NOT exception`).
 - `applies_when`: rules gate to **N/A** (excluded from score and risk) when no applicability keyword matches. Negated mentions ("we do not transfer data outside the EU") do not activate the gate.
-- Keywords are matched case-insensitively on word boundaries, and negation is detected within the matching sentence (before and after the keyword).
+- Keywords are matched case-insensitively on word boundaries, and heuristic negation is detected within the matching clause and sentence (before and after the keyword). Complex language still requires human review.
 - Statuses: `PASS`, `WARN` (within 0.1 above the threshold — passes, flagged for review), `FAIL`, `N/A`.
 
 **Migrating from v1:** prose `condition:` strings still work (keywords are inferred) but are deprecated — `validate-rules` prints a warning per legacy predicate. Move each condition's key phrases into an explicit `keywords:` list.
@@ -218,6 +228,10 @@ Compliance Agent is designed to interoperate with:
 - **English-only.** Negation patterns and keyword matching are English-centric.
 - **Plain text only.** Documents must be extracted from PDF/Word before ingestion.
 - **Requires well-formed rules.** Start with the bundled examples and run `validate-rules`.
+- **No formal legal validation.** Rule packs and citations must be reviewed and maintained by qualified subject-matter experts.
+- **Local sensitive data.** RAG stores document chunks in the configured local Chroma directory; protect that directory and generated reports.
+- **Fail-safe index reset.** Reset refuses symlinks, broad/out-of-scope paths, and non-empty directories without a valid Compliance Agent ownership marker.
+- **Optional-stage status.** JSON checks expose requested, completed, and unavailable drift/RAG stages so automation can detect partial results.
 
 ---
 

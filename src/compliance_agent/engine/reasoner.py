@@ -8,6 +8,7 @@ Schema v1 prose conditions are still accepted with a deprecation warning.
 
 import re
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import Any, Optional
 
@@ -199,6 +200,7 @@ class DDL:
 
 _WORD_START = re.compile(r"\w")
 _SENTENCE_BREAK = re.compile(r"[.!?]+[\"')\]]*(?:\s+|$)|\n{2,}")
+_CLAUSE_BREAK = re.compile(r";\s*|,\s+(?=(?:but|however|although|yet|nevertheless)\b)", re.IGNORECASE)
 
 _PRE_NEGATION_PATTERNS = tuple(
     re.compile(p, re.IGNORECASE)
@@ -254,13 +256,29 @@ def _span_for(spans: list[tuple[int, int]], pos: int, text_len: int) -> tuple[in
     return max(0, pos - 80), min(text_len, pos + 80)
 
 
-def _is_negated(text: str, sentence: tuple[int, int], match_start: int, match_end: int) -> bool:
-    """Detect negation of a keyword match within its own sentence only."""
-    sent_start, sent_end = sentence
-    before = text[sent_start:match_start]
+def _clause_spans(text: str, sentence_spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Split sentence spans at clause boundaries that can change polarity."""
+    clauses = []
+    for sentence_start, sentence_end in sentence_spans:
+        start = sentence_start
+        sentence = text[sentence_start:sentence_end]
+        for match in _CLAUSE_BREAK.finditer(sentence):
+            boundary = sentence_start + match.start()
+            if text[start:boundary].strip():
+                clauses.append((start, boundary))
+            start = sentence_start + match.end()
+        if text[start:sentence_end].strip():
+            clauses.append((start, sentence_end))
+    return clauses
+
+
+def _is_negated(text: str, scope: tuple[int, int], match_start: int, match_end: int) -> bool:
+    """Detect negation within the clause containing a keyword match."""
+    scope_start, scope_end = scope
+    before = text[scope_start:match_start]
     if any(p.search(before) for p in _PRE_NEGATION_PATTERNS):
         return True
-    after = text[match_end:sent_end]
+    after = text[match_end:scope_end]
     return bool(_POST_NEGATION.search(after))
 
 
@@ -305,6 +323,7 @@ def extract_predicate(predicate: Predicate, text: str, spans: Optional[list[tupl
     """
     if spans is None:
         spans = _sentence_spans(text)
+    clause_spans = _clause_spans(text, spans)
 
     terms, explicit = _predicate_terms(predicate)
     if not terms:
@@ -326,7 +345,8 @@ def extract_predicate(predicate: Predicate, text: str, spans: Optional[list[tupl
         negated = 0
         for match in pattern.finditer(text):
             sentence = _span_for(spans, match.start(), len(text))
-            is_neg = _is_negated(text, sentence, match.start(), match.end())
+            clause = _span_for(clause_spans, match.start(), len(text))
+            is_neg = _is_negated(text, clause, match.start(), match.end())
             snippets.append(_build_snippet(text, sentence, match.start(), match.end(), label, negated=is_neg))
             if is_neg:
                 negated += 1
@@ -414,10 +434,6 @@ def _parse_condition_keywords(condition: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _clamp(value: float) -> float:
-    return max(0.0, min(1.0, value))
-
-
 def parse_scenario(data: Any) -> tuple[str, dict[str, float]]:
     """Parse a scenario YAML payload into (description, facts).
 
@@ -442,14 +458,24 @@ def parse_scenario(data: Any) -> tuple[str, dict[str, float]]:
             if not isinstance(entry, dict) or "predicate" not in entry:
                 raise ValueError(f"facts[{index}] must be a mapping with a 'predicate' key.")
             value = entry.get("value", 1.0)
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not isfinite(float(value))
+                or not 0 <= value <= 1
+            ):
                 raise ValueError(f"facts[{index}].value must be a number between 0 and 1.")
-            facts[str(entry["predicate"])] = _clamp(float(value))
+            facts[str(entry["predicate"])] = float(value)
     elif isinstance(facts_raw, dict):
         for name, value in facts_raw.items():
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not isfinite(float(value))
+                or not 0 <= value <= 1
+            ):
                 raise ValueError(f"Fact '{name}' must map to a number between 0 and 1.")
-            facts[str(name)] = _clamp(float(value))
+            facts[str(name)] = float(value)
     else:
         raise ValueError("'facts' must be a list of {predicate, value} entries or a mapping.")
 
@@ -474,6 +500,13 @@ class ComplianceReasoner:
     """Applies DDL rules to policy documents and scenarios."""
 
     def __init__(self, threshold: float = 0.5):
+        if (
+            isinstance(threshold, bool)
+            or not isinstance(threshold, (int, float))
+            or not isfinite(float(threshold))
+            or not 0 <= threshold <= 1
+        ):
+            raise ValueError("threshold must be a finite number between 0 and 1")
         self.threshold = threshold
         self.ddl = DDL(fuzzy=True)
 
@@ -637,7 +670,13 @@ class ComplianceReasoner:
             errors.append(f"{prefix}.match must be one of: {', '.join(sorted(VALID_MATCH_MODES))}.")
 
         weight = predicate.get("weight", 1.0)
-        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight <= 0 or weight > 1:
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not isfinite(float(weight))
+            or weight <= 0
+            or weight > 1
+        ):
             errors.append(f"{prefix}.weight must be a number greater than 0 and at most 1.")
 
         return errors
