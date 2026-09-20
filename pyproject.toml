@@ -39,7 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 rag = [
-    "langchain-text-splitters>=0.3.0,<1.0.0",
+    "langchain-text-splitters>=1.1.2,<2.0.0",
     "langchain-huggingface>=0.1.0,<1.0.0",
     "langchain-chroma>=0.1.0,<1.0.0",
     "chromadb>=0.5.0,<2.0.0",
