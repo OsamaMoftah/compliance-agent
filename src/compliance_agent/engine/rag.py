@@ -74,9 +74,8 @@ class RegulatoryRAG:
 
         Returns the number of chunks ingested.
         """
-        try:
-            source_path = Path(source_dir).expanduser().resolve(strict=True)
-        except FileNotFoundError:
+        source_path = Path(os.path.realpath(os.path.expanduser(source_dir)))
+        if not source_path.exists():
             raise FileNotFoundError(f"Source directory not found: {source_dir}")
         if not source_path.is_dir():
             raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
